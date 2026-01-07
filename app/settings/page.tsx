@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Info, CheckCircle2, Loader2, Link as LinkIcon, Eye, EyeOff, Upload, File, Trash2, Download, AlertCircle } from 'lucide-react';
+import { Info, CheckCircle2, Loader2, Link as LinkIcon, Eye, EyeOff, Upload, File, Trash2, ExternalLink, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { saveCanvasToken, getCanvasToken, getHiddenCourses, showCourse } from '../lib/courseStorage';
 import { fetchCanvasCourses, CanvasCourse } from '../actions/canvas';
@@ -169,13 +169,9 @@ export default function SettingsPage() {
     setUploadedFiles(prev => prev.filter(f => f.id !== fileId));
   };
 
-  const handleDownloadFile = (file: UploadedFile) => {
-    const link = document.createElement('a');
-    link.href = file.data;
-    link.download = file.name;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleOpenFile = (file: UploadedFile) => {
+    // Open file in a new tab instead of downloading
+    window.open(file.data, '_blank');
   };
 
   const formatFileSize = (bytes: number): string => {
@@ -557,11 +553,11 @@ export default function SettingsPage() {
                         </div>
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={() => handleDownloadFile(file)}
+                            onClick={() => handleOpenFile(file)}
                             className="p-2 text-[#002E5D] hover:bg-blue-50 rounded-lg transition-colors"
-                            aria-label="Download file"
+                            aria-label="Open file"
                           >
-                            <Download className="w-4 h-4" />
+                            <ExternalLink className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => handleDeleteFile(file.id)}

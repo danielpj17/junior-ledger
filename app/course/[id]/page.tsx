@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Edit2, Save, X, Calendar, FileText, Loader2, AlertCircle, EyeOff, Trash2, Folder, Download, File } from 'lucide-react';
+import { Edit2, Save, X, Calendar, FileText, Loader2, AlertCircle, EyeOff, Trash2, Folder, ExternalLink, File } from 'lucide-react';
 import { fetchCourseAssignments, fetchCourseFiles, fetchCourseFolders, fetchFolderFiles, testFolderAccess, CanvasFile, CanvasFolder } from '../../actions/canvas';
 import { getCanvasToken } from '../../lib/courseStorage';
 import { useCourses } from '../../components/CoursesProvider';
@@ -410,7 +410,7 @@ export default function CoursePage() {
                           </p>
                         </div>
                       </div>
-                      <Download className="w-4 h-4 text-gray-400 group-hover:text-[#002E5D] flex-shrink-0 ml-2" />
+                      <ExternalLink className="w-4 h-4 text-gray-400 group-hover:text-[#002E5D] flex-shrink-0 ml-2" />
                     </motion.a>
                   ))}
                 </div>
@@ -492,7 +492,7 @@ export default function CoursePage() {
                                           </p>
                                         </div>
                                       </div>
-                                      <Download className="w-3 h-3 text-gray-400 group-hover:text-[#002E5D] flex-shrink-0 ml-2" />
+                                      <ExternalLink className="w-3 h-3 text-gray-400 group-hover:text-[#002E5D] flex-shrink-0 ml-2" />
                                     </a>
                                   ))
                                 ) : (
