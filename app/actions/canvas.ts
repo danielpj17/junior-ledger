@@ -205,3 +205,218 @@ export async function testFolderAccess(token: string, folderId: number): Promise
     return true;
   }
 }
+
+export interface CanvasCalendarEvent {
+  id: number;
+  title: string;
+  start_at: string;
+  end_at: string | null;
+  description: string | null;
+  location_name: string | null;
+  location_address: string | null;
+  context_code: string;
+  workflow_state: string;
+  url: string;
+  html_url: string;
+  all_day: boolean;
+  all_day_date: string | null;
+  created_at: string;
+  updated_at: string;
+  type: string;
+}
+
+// Fetch calendar events from Canvas (including assignments)
+export async function fetchCalendarEvents(
+  token: string,
+  startDate?: string,
+  endDate?: string,
+  contextCodes?: string[]
+): Promise<CanvasCalendarEvent[]> {
+  try {
+    const allEvents: CanvasCalendarEvent[] = [];
+    
+    // Fetch calendar events (both events and assignments)
+    let url = `${CANVAS_API_BASE}/calendar_events?per_page=100`;
+    
+    if (startDate) {
+      url += `&start_date=${startDate}`;
+    }
+    if (endDate) {
+      url += `&end_date=${endDate}`;
+    }
+    if (contextCodes && contextCodes.length > 0) {
+      contextCodes.forEach(code => {
+        url += `&context_codes[]=${code}`;
+      });
+    }
+
+    const eventsResponse = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (eventsResponse.ok) {
+      const events = await eventsResponse.json();
+      allEvents.push(...events);
+    } else {
+      console.warn('Failed to fetch calendar events:', eventsResponse.status);
+    }
+
+    // Also fetch assignments and convert them to calendar events
+    if (contextCodes && contextCodes.length > 0) {
+      const assignmentPromises = contextCodes.map(async (contextCode) => {
+        const courseIdMatch = contextCode.match(/^course_(\d+)$/);
+        if (!courseIdMatch) return [];
+
+        const courseId = parseInt(courseIdMatch[1], 10);
+        try {
+          let assignmentsUrl = `${CANVAS_API_BASE}/courses/${courseId}/assignments?per_page=100&include[]=assignment_overrides`;
+          
+          if (startDate) {
+            assignmentsUrl += `&bucket=upcoming`;
+          }
+
+          const assignmentsResponse = await fetch(assignmentsUrl, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+          });
+
+          if (!assignmentsResponse.ok) {
+            return [];
+          }
+
+          const assignments = await assignmentsResponse.json();
+          
+          // Convert assignments to calendar events
+          return assignments
+            .filter((assignment: any) => assignment.due_at || assignment.all_dates)
+            .map((assignment: any) => {
+              // Handle assignments with multiple due dates
+              if (assignment.all_dates && assignment.all_dates.length > 0) {
+                return assignment.all_dates.map((dateInfo: any) => ({
+                  id: assignment.id * 1000 + (dateInfo.id || 0), // Make unique IDs
+                  title: assignment.name,
+                  start_at: dateInfo.due_at || assignment.due_at || '',
+                  end_at: dateInfo.due_at || assignment.due_at || null,
+                  description: assignment.description || null,
+                  location_name: null,
+                  location_address: null,
+                  context_code: contextCode,
+                  workflow_state: assignment.workflow_state || 'published',
+                  url: assignment.html_url || '',
+                  html_url: assignment.html_url || '',
+                  all_day: false,
+                  all_day_date: dateInfo.due_at ? dateInfo.due_at.split('T')[0] : null,
+                  created_at: assignment.created_at || '',
+                  updated_at: assignment.updated_at || '',
+                  type: 'assignment',
+                }));
+              } else if (assignment.due_at) {
+                return {
+                  id: assignment.id,
+                  title: assignment.name,
+                  start_at: assignment.due_at,
+                  end_at: assignment.due_at,
+                  description: assignment.description || null,
+                  location_name: null,
+                  location_address: null,
+                  context_code: contextCode,
+                  workflow_state: assignment.workflow_state || 'published',
+                  url: assignment.html_url || '',
+                  html_url: assignment.html_url || '',
+                  all_day: false,
+                  all_day_date: assignment.due_at ? assignment.due_at.split('T')[0] : null,
+                  created_at: assignment.created_at || '',
+                  updated_at: assignment.updated_at || '',
+                  type: 'assignment',
+                };
+              }
+              return null;
+            })
+            .flat()
+            .filter((event: any) => {
+              if (!event || !event.start_at) return false;
+              // Filter by date range if provided
+              const eventDate = event.start_at.split('T')[0];
+              if (startDate && eventDate < startDate) return false;
+              if (endDate && eventDate > endDate) return false;
+              return true;
+            });
+        } catch (err) {
+          console.error(`Error fetching assignments for course ${courseId}:`, err);
+          return [];
+        }
+      });
+
+      const assignmentEventsArrays = await Promise.all(assignmentPromises);
+      assignmentEventsArrays.forEach(events => {
+        allEvents.push(...events);
+      });
+    }
+
+    // Remove duplicates (in case an assignment also appears as a calendar event)
+    const uniqueEvents = allEvents.filter((event, index, self) =>
+      index === self.findIndex((e) => 
+        e.id === event.id && e.context_code === event.context_code
+      )
+    );
+
+    return uniqueEvents;
+  } catch (error) {
+    console.error('Error fetching calendar events:', error);
+    throw error instanceof Error
+      ? error
+      : new Error('Failed to fetch calendar events from Canvas');
+  }
+}
+
+// Fetch user's custom colors for courses
+export async function fetchCourseColor(token: string, courseId: number): Promise<string | null> {
+  try {
+    const response = await fetch(
+      `${CANVAS_API_BASE}/users/self/colors/course_${courseId}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      // If color not set, return null (Canvas will use default)
+      if (response.status === 404) {
+        return null;
+      }
+      throw new Error(`Failed to fetch course color: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.hexcode || null;
+  } catch (error) {
+    console.error('Error fetching course color:', error);
+    // Return null on error so we can use a default color
+    return null;
+  }
+}
+
+// Fetch colors for multiple courses at once
+export async function fetchCourseColors(
+  token: string,
+  courseIds: number[]
+): Promise<Record<number, string>> {
+  const colors: Record<number, string> = {};
+  
+  // Canvas doesn't have a bulk endpoint, so we fetch individually
+  // But we do it in parallel to be efficient
+  const promises = courseIds.map(async (courseId) => {
+    const color = await fetchCourseColor(token, courseId);
+    if (color) {
+      colors[courseId] = color;
+    }
+  });
+
+  await Promise.all(promises);
+  return colors;
+}

@@ -6,6 +6,7 @@ export interface CourseWithNickname {
   courseCode: string;
   nickname: string;
   href: string;
+  color?: string; // Canvas course color
 }
 
 export interface ChatMessage {
@@ -29,6 +30,8 @@ const CANVAS_TOKEN_KEY = 'junior-ledger-canvas-token';
 const HIDDEN_COURSES_KEY = 'junior-ledger-hidden-courses';
 const CHAT_STORAGE_PREFIX = 'junior-ledger-chat-';
 const FILES_STORAGE_PREFIX = 'junior-ledger-files-';
+const CALENDAR_COURSE_COLORS_KEY = 'junior-ledger-course-colors';
+const CALENDAR_SELECTED_COURSES_KEY = 'junior-ledger-calendar-selected-courses';
 
 // Get course nicknames from localStorage
 export function getCourseNicknames(): Record<number, string> {
@@ -263,5 +266,61 @@ export function deleteCourseFile(courseId: number | null, fileId: string): void 
     saveCourseFiles(courseId, updated);
   } catch (error) {
     console.error('Error deleting file:', error);
+  }
+}
+
+// Calendar Storage Functions
+
+// Get course colors from localStorage
+export function getCourseColors(): Record<number, string> {
+  if (typeof window === 'undefined') return {};
+  
+  try {
+    const stored = localStorage.getItem(CALENDAR_COURSE_COLORS_KEY);
+    return stored ? JSON.parse(stored) : {};
+  } catch {
+    return {};
+  }
+}
+
+// Save course colors
+export function saveCourseColors(colors: Record<number, string>): void {
+  if (typeof window === 'undefined') return;
+  
+  try {
+    localStorage.setItem(CALENDAR_COURSE_COLORS_KEY, JSON.stringify(colors));
+  } catch (error) {
+    console.error('Error saving course colors:', error);
+  }
+}
+
+// Get selected course IDs for calendar (defaults to all courses if not set)
+export function getCalendarSelectedCourses(): Set<number> | null {
+  if (typeof window === 'undefined') return null;
+  
+  try {
+    const stored = localStorage.getItem(CALENDAR_SELECTED_COURSES_KEY);
+    if (stored) {
+      const ids = JSON.parse(stored);
+      return new Set(ids);
+    }
+    return null; // null means all courses are selected (default)
+  } catch {
+    return null;
+  }
+}
+
+// Save selected course IDs for calendar
+export function saveCalendarSelectedCourses(selectedCourseIds: Set<number> | null): void {
+  if (typeof window === 'undefined') return;
+  
+  try {
+    if (selectedCourseIds === null) {
+      localStorage.removeItem(CALENDAR_SELECTED_COURSES_KEY);
+    } else {
+      localStorage.setItem(CALENDAR_SELECTED_COURSES_KEY, JSON.stringify(Array.from(selectedCourseIds)));
+    }
+  } catch (error) {
+    console.error('Error saving calendar selected courses:', error);
   }
 }

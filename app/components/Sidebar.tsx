@@ -10,12 +10,14 @@ import {
   ChevronLeft,
   ChevronRight,
   Loader2,
+  Calendar,
 } from 'lucide-react';
 import { useSidebar } from './SidebarProvider';
 import { useCourses } from './CoursesProvider';
 
 const staticNavigationItems = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+  { name: 'Calendar', href: '/calendar', icon: Calendar },
   { name: 'Sandbox (T-Accounts)', href: '/sandbox', icon: SquareStack },
   { name: 'Settings', href: '/settings', icon: LinkIcon },
 ];
