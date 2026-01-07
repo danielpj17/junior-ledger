@@ -8,9 +8,27 @@ export interface CourseWithNickname {
   href: string;
 }
 
+export interface ChatMessage {
+  id: string;
+  text: string;
+  sender: 'user' | 'assistant';
+}
+
+export interface UploadedFile {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  data: string; // base64 encoded
+  uploadDate: string;
+  courseId: number | null; // null for semester-wide documents
+}
+
 const NICKNAMES_STORAGE_KEY = 'junior-ledger-course-nicknames';
 const CANVAS_TOKEN_KEY = 'junior-ledger-canvas-token';
 const HIDDEN_COURSES_KEY = 'junior-ledger-hidden-courses';
+const CHAT_STORAGE_PREFIX = 'junior-ledger-chat-';
+const FILES_STORAGE_PREFIX = 'junior-ledger-files-';
 
 // Get course nicknames from localStorage
 export function getCourseNicknames(): Record<number, string> {
@@ -122,4 +140,128 @@ export function applyNicknamesToCourses(
         href: `/course/${course.id}`,
       };
     });
+}
+
+// Chat Storage Functions
+
+// Get chat messages for a specific course
+export function getCourseChatMessages(courseId: number): ChatMessage[] {
+  if (typeof window === 'undefined') return [];
+  
+  try {
+    const key = `${CHAT_STORAGE_PREFIX}${courseId}`;
+    const stored = localStorage.getItem(key);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+}
+
+// Save chat messages for a specific course
+export function saveCourseChatMessages(courseId: number, messages: ChatMessage[]): void {
+  if (typeof window === 'undefined') return;
+  
+  try {
+    const key = `${CHAT_STORAGE_PREFIX}${courseId}`;
+    localStorage.setItem(key, JSON.stringify(messages));
+  } catch (error) {
+    console.error('Error saving chat messages:', error);
+  }
+}
+
+// Clear chat messages for a specific course
+export function clearCourseChatMessages(courseId: number): void {
+  if (typeof window === 'undefined') return;
+  
+  try {
+    const key = `${CHAT_STORAGE_PREFIX}${courseId}`;
+    localStorage.removeItem(key);
+  } catch (error) {
+    console.error('Error clearing chat messages:', error);
+  }
+}
+
+// File Storage Functions
+
+// Get uploaded files for a specific course (or semester documents if courseId is null)
+export function getCourseFiles(courseId: number | null): UploadedFile[] {
+  if (typeof window === 'undefined') return [];
+  
+  try {
+    const key = courseId === null 
+      ? `${FILES_STORAGE_PREFIX}semester` 
+      : `${FILES_STORAGE_PREFIX}${courseId}`;
+    const stored = localStorage.getItem(key);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+}
+
+// Get all uploaded files across all courses
+export function getAllFiles(): UploadedFile[] {
+  if (typeof window === 'undefined') return [];
+  
+  try {
+    const allFiles: UploadedFile[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(FILES_STORAGE_PREFIX)) {
+        const stored = localStorage.getItem(key);
+        if (stored) {
+          const files = JSON.parse(stored);
+          allFiles.push(...files);
+        }
+      }
+    }
+    return allFiles;
+  } catch {
+    return [];
+  }
+}
+
+// Save uploaded files for a specific course (or semester documents if courseId is null)
+export function saveCourseFiles(courseId: number | null, files: UploadedFile[]): void {
+  if (typeof window === 'undefined') return;
+  
+  try {
+    const key = courseId === null 
+      ? `${FILES_STORAGE_PREFIX}semester` 
+      : `${FILES_STORAGE_PREFIX}${courseId}`;
+    localStorage.setItem(key, JSON.stringify(files));
+  } catch (error) {
+    console.error('Error saving files:', error);
+    // If quota exceeded, provide helpful error
+    if (error instanceof DOMException && error.code === 22) {
+      throw new Error('Storage quota exceeded. Please delete some files to free up space.');
+    }
+    throw error;
+  }
+}
+
+// Add a file to a course (or semester documents if courseId is null)
+export function addCourseFile(courseId: number | null, file: UploadedFile): void {
+  if (typeof window === 'undefined') return;
+  
+  try {
+    const files = getCourseFiles(courseId);
+    files.push(file);
+    saveCourseFiles(courseId, files);
+  } catch (error) {
+    console.error('Error adding file:', error);
+    throw error;
+  }
+}
+
+// Delete a file from a course (or semester documents if courseId is null)
+export function deleteCourseFile(courseId: number | null, fileId: string): void {
+  if (typeof window === 'undefined') return;
+  
+  try {
+    const files = getCourseFiles(courseId);
+    const updated = files.filter(f => f.id !== fileId);
+    saveCourseFiles(courseId, updated);
+  } catch (error) {
+    console.error('Error deleting file:', error);
+  }
 }

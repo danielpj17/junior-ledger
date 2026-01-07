@@ -6,7 +6,9 @@ const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY ||
 
 export async function sendChatMessage(
   message: string,
-  tutorMode: boolean
+  tutorMode: boolean,
+  courseId?: number,
+  courseNickname?: string
 ): Promise<string> {
   try {
     const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY || process.env.GOOGLE_AI_API_KEY;
@@ -39,9 +41,25 @@ export async function sendChatMessage(
     // Initialize with first model (errors only occur on generateContent)
     model = genAI.getGenerativeModel({ model: modelName });
 
-    const systemPrompt = tutorMode
-      ? 'You are the Junior Ledger Assistant for a BYU Accounting student. Tutor Mode is ON. Do not give direct answers. Instead, ask Socratic questions to help the student find the answer themselves using GAAP principles. Guide them through their thinking process step by step.'
-      : 'You are the Junior Ledger Assistant for a BYU Accounting student. Tutor Mode is OFF. Give concise, professional accounting explanations. Be helpful and clear while maintaining academic rigor.';
+    let systemPrompt = '';
+    
+    if (courseId && courseNickname) {
+      // Course-specific assistant
+      const courseContext = `You are the ${courseNickname} Junior Assistant for a BYU Accounting student. You specialize in helping with ${courseNickname} coursework.`;
+      
+      if (tutorMode) {
+        systemPrompt = `${courseContext} Tutor Mode is ON. Do not give direct answers. Instead, ask Socratic questions to help the student find the answer themselves using GAAP principles and ${courseNickname} concepts. Guide them through their thinking process step by step.`;
+      } else {
+        systemPrompt = `${courseContext} Tutor Mode is OFF. Give concise, professional accounting explanations related to ${courseNickname}. Be helpful and clear while maintaining academic rigor.`;
+      }
+    } else {
+      // General assistant
+      if (tutorMode) {
+        systemPrompt = 'You are the Junior Ledger Assistant for a BYU Accounting student. Tutor Mode is ON. Do not give direct answers. Instead, ask Socratic questions to help the student find the answer themselves using GAAP principles. Guide them through their thinking process step by step.';
+      } else {
+        systemPrompt = 'You are the Junior Ledger Assistant for a BYU Accounting student. Tutor Mode is OFF. Give concise, professional accounting explanations. Be helpful and clear while maintaining academic rigor.';
+      }
+    }
 
     const prompt = `${systemPrompt}\n\nStudent: ${message}\n\nAssistant:`;
 

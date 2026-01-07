@@ -7,6 +7,7 @@ import { fetchCourseAssignments, fetchCourseFiles, fetchCourseFolders, fetchFold
 import { getCanvasToken } from '../../lib/courseStorage';
 import { useCourses } from '../../components/CoursesProvider';
 import { motion, AnimatePresence } from 'framer-motion';
+import JuniorAssistant from '../../components/JuniorAssistant';
 
 export default function CoursePage() {
   const params = useParams();
@@ -311,7 +312,11 @@ export default function CoursePage() {
         </div>
       )}
 
-      {/* Upcoming Assignments */}
+      {/* Main Content Layout */}
+      <div className="flex flex-col lg:flex-row gap-6">
+        {/* Left Section - Course Content */}
+        <div className="flex-1 space-y-6">
+          {/* Upcoming Assignments */}
       <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-2xl font-semibold text-[#002E5D] flex items-center gap-2">
@@ -361,8 +366,8 @@ export default function CoursePage() {
         )}
       </div>
 
-      {/* Course Files Section */}
-      <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-6">
+          {/* Course Files Section */}
+          <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-2xl font-semibold text-[#002E5D] flex items-center gap-2">
             <Folder className="w-6 h-6" />
@@ -512,6 +517,15 @@ export default function CoursePage() {
             )}
           </div>
         )}
+          </div>
+        </div>
+
+        {/* Right Section - Junior Assistant (Sticky) */}
+        <div className="w-full lg:w-96 flex-shrink-0">
+          <div className="sticky top-8">
+            <JuniorAssistant courseId={courseId} courseNickname={course.nickname} />
+          </div>
+        </div>
       </div>
     </div>
   );

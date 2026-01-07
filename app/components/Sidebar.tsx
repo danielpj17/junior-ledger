@@ -17,7 +17,7 @@ import { useCourses } from './CoursesProvider';
 const staticNavigationItems = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Sandbox (T-Accounts)', href: '/sandbox', icon: SquareStack },
-  { name: 'Canvas Sync', href: '/canvas-sync', icon: LinkIcon },
+  { name: 'Settings', href: '/settings', icon: LinkIcon },
 ];
 
 export default function Sidebar() {

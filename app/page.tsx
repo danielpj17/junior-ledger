@@ -60,10 +60,10 @@ export default function Home() {
                     Connect your Canvas account to see your courses here.
                   </p>
                   <Link
-                    href="/canvas-sync"
+                    href="/settings"
                     className="text-sm text-blue-600 hover:text-blue-800 font-medium underline"
                   >
-                    Go to Canvas Sync →
+                    Go to Settings →
                   </Link>
                 </div>
               </div>
