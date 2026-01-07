@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Info, CheckCircle2, Loader2, Link as LinkIcon, Eye, EyeOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { saveCanvasToken, getCanvasToken, getHiddenCourses, showCourse } from '../lib/courseStorage';
-import { fetchCanvasCourses } from '../actions/canvas';
+import { fetchCanvasCourses, CanvasCourse } from '../actions/canvas';
 import { useCourses } from '../components/CoursesProvider';
 
 export default function CanvasSyncPage() {
@@ -41,8 +41,8 @@ export default function CanvasSyncPage() {
         const allCourses = await response.json();
         const hiddenIds = getHiddenCourses();
         const hidden = allCourses
-          .filter(course => hiddenIds.includes(course.id))
-          .map(course => ({ id: course.id, name: course.name || course.course_code || 'Unnamed Course' }));
+          .filter((course: CanvasCourse) => hiddenIds.includes(course.id))
+          .map((course: CanvasCourse) => ({ id: course.id, name: course.name || course.course_code || 'Unnamed Course' }));
         setHiddenCourses(hidden);
       }
     } catch (err) {
