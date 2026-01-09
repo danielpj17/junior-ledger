@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Info, CheckCircle2, Loader2, Link as LinkIcon, Eye, EyeOff, Upload, File, Trash2, ExternalLink, AlertCircle } from 'lucide-react';
+import { Info, CheckCircle2, Loader2, Link as LinkIcon, Eye, EyeOff, Upload, File, Trash2, ExternalLink, AlertCircle, Calendar as CalendarIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { saveCanvasToken, getCanvasToken, getHiddenCourses, showCourse, getAutoRefreshInterval, saveAutoRefreshInterval } from '../lib/courseStorage';
+import { saveCanvasToken, getCanvasToken, getHiddenCourses, showCourse, getAutoRefreshInterval, saveAutoRefreshInterval, getGoogleCalendarFeedUrl, saveGoogleCalendarFeedUrl } from '../lib/courseStorage';
 import { fetchCanvasCourses, CanvasCourse } from '../actions/canvas';
 import { useCourses } from '../components/CoursesProvider';
 import { getCourseFiles, addCourseFile, deleteCourseFile, UploadedFile } from '../lib/courseStorage';
@@ -32,6 +32,9 @@ export default function SettingsPage() {
   // Auto-refresh state
   const [refreshInterval, setRefreshInterval] = useState<number>(5);
 
+  // Google Calendar state
+  const [googleCalendarUrl, setGoogleCalendarUrl] = useState('');
+
   useEffect(() => {
     // Load saved token if it exists
     const savedToken = getCanvasToken();
@@ -41,6 +44,11 @@ export default function SettingsPage() {
     loadHiddenCourses();
     // Load saved auto-refresh interval
     setRefreshInterval(getAutoRefreshInterval());
+    // Load saved Google Calendar URL
+    const savedGoogleCalUrl = getGoogleCalendarFeedUrl();
+    if (savedGoogleCalUrl) {
+      setGoogleCalendarUrl(savedGoogleCalUrl);
+    }
   }, []);
 
   useEffect(() => {
@@ -352,6 +360,65 @@ export default function SettingsPage() {
                 )}
               </div>
             </form>
+          </div>
+
+          {/* Google Calendar Integration */}
+          <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-6">
+            <h2 className="text-xl font-semibold text-[#002E5D] mb-2 flex items-center gap-2">
+              <CalendarIcon className="w-5 h-5" />
+              Google Calendar Integration
+            </h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Add your Google Calendar events to the calendar view by providing your private iCal feed URL.
+            </p>
+            <div className="space-y-4">
+              <div>
+                <label
+                  htmlFor="google-calendar-url"
+                  className="block text-sm font-semibold text-gray-700 mb-2"
+                >
+                  Google Calendar Secret iCal URL
+                </label>
+                <input
+                  type="url"
+                  id="google-calendar-url"
+                  value={googleCalendarUrl}
+                  onChange={(e) => {
+                    setGoogleCalendarUrl(e.target.value);
+                    saveGoogleCalendarFeedUrl(e.target.value);
+                  }}
+                  placeholder="https://calendar.google.com/calendar/ical/..."
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002E5D] focus:border-transparent"
+                />
+                <p className="mt-2 text-xs text-gray-500">
+                  Your Google Calendar events will appear alongside Canvas events in the calendar view.
+                </p>
+              </div>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h3 className="font-semibold text-blue-900 mb-2 flex items-center gap-2">
+                  <Info className="w-4 h-4" />
+                  How to get your Google Calendar iCal URL
+                </h3>
+                <ol className="list-decimal list-inside space-y-1 text-sm text-blue-800">
+                  <li>Go to <a href="https://calendar.google.com" target="_blank" rel="noopener noreferrer" className="underline">Google Calendar</a></li>
+                  <li>Click the settings icon (⚙️) next to your calendar name</li>
+                  <li>Scroll down to "Integrate calendar" section</li>
+                  <li>Copy the "Secret address in iCal format" URL</li>
+                  <li>Paste it in the field above</li>
+                </ol>
+                <div className="mt-3 pt-3 border-t border-blue-200">
+                  <p className="text-xs text-blue-700">
+                    <strong>Note:</strong> Use the "Secret address" URL to keep your calendar private. Do not share this URL with others.
+                  </p>
+                </div>
+              </div>
+              {googleCalendarUrl && (
+                <div className="flex items-center gap-2 text-sm text-green-700">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Google Calendar URL saved</span>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Auto-Refresh Settings */}

@@ -3,8 +3,9 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Calendar as CalendarIcon, Loader2, AlertCircle, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getCanvasToken, getAutoRefreshInterval } from '../lib/courseStorage';
+import { getCanvasToken, getAutoRefreshInterval, getGoogleCalendarFeedUrl } from '../lib/courseStorage';
 import { fetchCalendarEvents, CanvasCalendarEvent, fetchCourseColors } from '../actions/canvas';
+import { fetchGoogleCalendarEvents } from '../actions/googleCalendar';
 import { useCourses } from '../components/CoursesProvider';
 import { getCourseColors, saveCourseColors, getCalendarSelectedCourses, saveCalendarSelectedCourses } from '../lib/courseStorage';
 
@@ -74,23 +75,13 @@ export default function CalendarPage() {
   // Fetch calendar events
   const loadCalendarEvents = useCallback(async () => {
     const token = getCanvasToken();
-    if (!token || courses.length === 0) {
-      setEvents([]);
-      return;
-    }
+    const allEvents: CanvasCalendarEvent[] = [];
 
-    // Determine which courses to fetch
+    // Determine which courses to fetch for Canvas
     // null means all courses are selected (default), empty Set means none selected
     const coursesToFetch = selectedCourses === null 
       ? new Set(courses.map(c => c.canvasId))
       : selectedCourses;
-    
-    // Don't fetch if no courses are selected
-    if (coursesToFetch.size === 0) {
-      setEvents([]);
-      setIsLoading(false);
-      return;
-    }
 
     setIsLoading(true);
     setError(null);
@@ -103,16 +94,51 @@ export default function CalendarPage() {
       const startDateStr = startDate.toISOString().split('T')[0];
       const endDateStr = endDate.toISOString().split('T')[0];
 
-      // Build context codes for selected courses
-      const contextCodes = Array.from(coursesToFetch).map(id => `course_${id}`);
+      // Fetch Canvas calendar events if we have a token and courses
+      if (token && courses.length > 0 && coursesToFetch.size > 0) {
+        try {
+          // Build context codes for selected courses
+          const contextCodes = Array.from(coursesToFetch).map(id => `course_${id}`);
 
-      const calendarEvents = await fetchCalendarEvents(
-        token,
-        startDateStr,
-        endDateStr,
-        contextCodes
-      );
-      setEvents(calendarEvents);
+          const canvasEvents = await fetchCalendarEvents(
+            token,
+            startDateStr,
+            endDateStr,
+            contextCodes
+          );
+          allEvents.push(...canvasEvents);
+        } catch (err) {
+          console.error('Error fetching Canvas events:', err);
+          // Continue even if Canvas fetch fails
+        }
+      }
+
+      // Fetch Google Calendar events if URL is configured
+      const googleCalUrl = getGoogleCalendarFeedUrl();
+      if (googleCalUrl && googleCalUrl.trim() !== '') {
+        try {
+          const googleEvents = await fetchGoogleCalendarEvents(
+            googleCalUrl,
+            startDateStr,
+            endDateStr
+          );
+          allEvents.push(...googleEvents);
+        } catch (err) {
+          console.error('Error fetching Google Calendar events:', err);
+          // Show error but don't block other events from displaying
+          const errorMessage = err instanceof Error ? err.message : 'Failed to load Google Calendar events';
+          setError(errorMessage);
+        }
+      }
+
+      // Sort all events by start time
+      allEvents.sort((a, b) => {
+        const timeA = new Date(a.start_at).getTime();
+        const timeB = new Date(b.start_at).getTime();
+        return timeA - timeB;
+      });
+
+      setEvents(allEvents);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load calendar events';
       setError(errorMessage);
@@ -196,10 +222,24 @@ export default function CalendarPage() {
     return match ? parseInt(match[1], 10) : null;
   };
 
-  // Filter events by selected courses
+  // Check if event is from Google Calendar
+  const isGoogleCalendarEvent = useCallback((event: CanvasCalendarEvent): boolean => {
+    return event.type === 'google-calendar' || event.type === 'google-calendar-exam' || event.context_code === 'google_calendar';
+  }, []);
+
+  // Check if event is an exam/test
+  const isExamEvent = useCallback((event: CanvasCalendarEvent): boolean => {
+    return event.type === 'google-calendar-exam';
+  }, []);
+
+  // Filter events by selected courses (Google Calendar events are always included)
   const filteredEvents = useMemo(() => {
     if (!selectedCourses) return events;
     return events.filter(event => {
+      // Always include Google Calendar events (including exams)
+      if (event.type === 'google-calendar' || event.type === 'google-calendar-exam' || event.context_code === 'google_calendar') return true;
+      
+      // Filter Canvas events by selected courses
       const courseId = getCourseIdFromContext(event.context_code);
       return courseId !== null && selectedCourses.has(courseId);
     });
@@ -411,12 +451,14 @@ export default function CalendarPage() {
             <div className="space-y-3">
               {selectedDateEvents.map((event) => {
               const courseId = getCourseIdFromContext(event.context_code);
-              const color = courseId ? getCourseColor(courseId) : '#002E5D';
-              const course = courses.find(c => c.canvasId === courseId);
+              const isGoogleEvent = isGoogleCalendarEvent(event);
+              const isExam = isExamEvent(event);
+              const color = courseId ? getCourseColor(courseId) : (isExam ? '#DC2626' : isGoogleEvent ? '#4285F4' : '#002E5D');
+              const course = courseId ? courses.find(c => c.canvasId === courseId) : null;
               
               return (
                 <div
-                  key={event.id}
+                  key={`${event.type}-${event.id}`}
                   className="p-4 rounded-lg border-l-4 hover:shadow-md transition-shadow"
                   style={{ borderLeftColor: color }}
                 >
@@ -427,9 +469,25 @@ export default function CalendarPage() {
                         {course && (
                           <span
                             className="text-xs px-2 py-0.5 rounded-full text-white font-medium"
-                            style={{ backgroundColor: color }}
+                            style={{ backgroundColor: courseId ? getCourseColor(courseId) : color }}
                           >
                             {course.nickname}
+                          </span>
+                        )}
+                        {isExam && (
+                          <span
+                            className="text-xs px-2 py-0.5 rounded-full text-white font-medium"
+                            style={{ backgroundColor: '#DC2626' }}
+                          >
+                            📝 Exam/Test
+                          </span>
+                        )}
+                        {isGoogleEvent && !isExam && (
+                          <span
+                            className="text-xs px-2 py-0.5 rounded-full text-white font-medium"
+                            style={{ backgroundColor: '#4285F4' }}
+                          >
+                            Google Calendar
                           </span>
                         )}
                       </div>
@@ -605,12 +663,14 @@ export default function CalendarPage() {
                     <div className="space-y-1">
                       {dayEvents.slice(0, 3).map((event) => {
                         const courseId = getCourseIdFromContext(event.context_code);
-                        const color = courseId ? getCourseColor(courseId) : '#002E5D';
+                        const isGoogleEvent = isGoogleCalendarEvent(event);
+                        const isExam = isExamEvent(event);
+                        const color = courseId ? getCourseColor(courseId) : (isExam ? '#DC2626' : isGoogleEvent ? '#4285F4' : '#002E5D');
                         
                         return (
                           <div
-                            key={event.id}
-                            className="text-xs p-1 rounded truncate"
+                            key={`${event.type}-${event.id}`}
+                            className="text-xs p-1 rounded truncate font-medium"
                             style={{
                               backgroundColor: `${color}20`,
                               borderLeft: `3px solid ${color}`,
@@ -674,12 +734,14 @@ export default function CalendarPage() {
                     <div className="space-y-2">
                       {dateEvents.map((event) => {
                         const courseId = getCourseIdFromContext(event.context_code);
-                        const color = courseId ? getCourseColor(courseId) : '#002E5D';
-                        const course = courses.find(c => c.canvasId === courseId);
+                        const isGoogleEvent = isGoogleCalendarEvent(event);
+                        const isExam = isExamEvent(event);
+                        const color = courseId ? getCourseColor(courseId) : (isExam ? '#DC2626' : isGoogleEvent ? '#4285F4' : '#002E5D');
+                        const course = courseId ? courses.find(c => c.canvasId === courseId) : null;
                         
                         return (
                           <div
-                            key={event.id}
+                            key={`${event.type}-${event.id}`}
                             className="p-3 rounded-lg border-l-4"
                             style={{ borderLeftColor: color }}
                           >
@@ -690,9 +752,25 @@ export default function CalendarPage() {
                                   {course && (
                                     <span
                                       className="text-xs px-2 py-0.5 rounded-full text-white font-medium"
-                                      style={{ backgroundColor: color }}
+                                      style={{ backgroundColor: courseId ? getCourseColor(courseId) : color }}
                                     >
                                       {course.nickname}
+                                    </span>
+                                  )}
+                                  {isExam && (
+                                    <span
+                                      className="text-xs px-2 py-0.5 rounded-full text-white font-medium"
+                                      style={{ backgroundColor: '#DC2626' }}
+                                    >
+                                      📝 Exam/Test
+                                    </span>
+                                  )}
+                                  {isGoogleEvent && !isExam && (
+                                    <span
+                                      className="text-xs px-2 py-0.5 rounded-full text-white font-medium"
+                                      style={{ backgroundColor: '#4285F4' }}
+                                    >
+                                      Google Calendar
                                     </span>
                                   )}
                                 </div>

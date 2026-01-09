@@ -46,6 +46,7 @@ const CANVAS_FILES_STORAGE_PREFIX = 'junior-ledger-canvas-files-';
 const CALENDAR_COURSE_COLORS_KEY = 'junior-ledger-course-colors';
 const CALENDAR_SELECTED_COURSES_KEY = 'junior-ledger-calendar-selected-courses';
 const AUTO_REFRESH_INTERVAL_KEY = 'junior-ledger-auto-refresh-interval';
+const GOOGLE_CALENDAR_FEED_URL_KEY = 'junior-ledger-google-cal-url';
 
 // Get course nicknames from localStorage
 export function getCourseNicknames(): Record<number, string> {
@@ -445,5 +446,33 @@ export function saveAutoRefreshInterval(intervalMinutes: number): void {
     localStorage.setItem(AUTO_REFRESH_INTERVAL_KEY, intervalMinutes.toString());
   } catch (error) {
     console.error('Error saving auto-refresh interval:', error);
+  }
+}
+
+// Google Calendar Feed URL Functions
+
+// Get Google Calendar feed URL from localStorage
+export function getGoogleCalendarFeedUrl(): string | null {
+  if (typeof window === 'undefined') return null;
+  
+  try {
+    return localStorage.getItem(GOOGLE_CALENDAR_FEED_URL_KEY);
+  } catch {
+    return null;
+  }
+}
+
+// Save Google Calendar feed URL
+export function saveGoogleCalendarFeedUrl(url: string): void {
+  if (typeof window === 'undefined') return;
+  
+  try {
+    if (url.trim() === '') {
+      localStorage.removeItem(GOOGLE_CALENDAR_FEED_URL_KEY);
+    } else {
+      localStorage.setItem(GOOGLE_CALENDAR_FEED_URL_KEY, url.trim());
+    }
+  } catch (error) {
+    console.error('Error saving Google Calendar feed URL:', error);
   }
 }
