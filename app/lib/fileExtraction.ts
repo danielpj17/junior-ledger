@@ -1,14 +1,5 @@
 'use client';
 
-import * as pdfjsLib from 'pdfjs-dist';
-import JSZip from 'jszip';
-
-// Configure PDF.js worker
-if (typeof window !== 'undefined') {
-  // Use a CDN URL for the PDF.js worker - using unpkg to get the version from node_modules
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@5.4.530/build/pdf.worker.min.js`;
-}
-
 export interface ExtractedText {
   fileName: string;
   text: string;
@@ -19,6 +10,14 @@ export interface ExtractedText {
  */
 async function extractTextFromPDF(fileData: string): Promise<string> {
   try {
+    const pdfjsLib = await import('pdfjs-dist');
+    
+    // Configure PDF.js worker
+    if (typeof window !== 'undefined') {
+      // Use a CDN URL for the PDF.js worker
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@5.4.530/build/pdf.worker.min.js`;
+    }
+    
     const base64Data = fileData.includes(',') ? fileData.split(',')[1] : fileData;
     const binaryString = atob(base64Data);
     const bytes = new Uint8Array(binaryString.length);
@@ -119,6 +118,8 @@ async function extractTextFromXlsx(fileData: string): Promise<string> {
  */
 async function extractTextFromPptx(fileData: string): Promise<string> {
   try {
+    const JSZip = (await import('jszip')).default;
+    
     const base64Data = fileData.includes(',') ? fileData.split(',')[1] : fileData;
     const binaryString = atob(base64Data);
     const bytes = new Uint8Array(binaryString.length);
@@ -132,11 +133,11 @@ async function extractTextFromPptx(fileData: string): Promise<string> {
     let fullText = '';
     
     // PPTX files contain slides in ppt/slides/slide*.xml
-    const slideFiles: JSZip.JSZipObject[] = [];
+    const slideFiles: Array<{ name: string; async: (type: string) => Promise<string> }> = [];
     
     zip.forEach((relativePath, file) => {
       if (relativePath.startsWith('ppt/slides/slide') && relativePath.endsWith('.xml')) {
-        slideFiles.push(file);
+        slideFiles.push(file as any);
       }
     });
     
