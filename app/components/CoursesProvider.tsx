@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { fetchCanvasCourses } from '../actions/canvas';
 import { 
   getCanvasToken, 
@@ -8,7 +8,8 @@ import {
   CourseWithNickname,
   saveCourseNickname as saveNickname,
   hideCourse as hideCourseStorage,
-  showCourse as showCourseStorage
+  showCourse as showCourseStorage,
+  getAutoRefreshInterval
 } from '../lib/courseStorage';
 import { CanvasCourse } from '../actions/canvas';
 
@@ -66,9 +67,54 @@ export function CoursesProvider({ children }: { children: ReactNode }) {
     setCourses(prev => prev.filter(course => course.canvasId !== canvasId));
   };
 
+  // Initial load
   useEffect(() => {
     refreshCourses();
   }, []);
+
+  // Auto-refresh on interval
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  
+  const setupAutoRefresh = () => {
+    // Clear existing interval
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+
+    const token = getCanvasToken();
+    if (!token) return;
+
+    const intervalMinutes = getAutoRefreshInterval();
+    if (intervalMinutes <= 0) return; // Auto-refresh disabled
+
+    const intervalMs = intervalMinutes * 60 * 1000;
+
+    // Set up new interval
+    intervalRef.current = setInterval(() => {
+      refreshCourses();
+    }, intervalMs);
+  };
+
+  useEffect(() => {
+    setupAutoRefresh();
+
+    // Listen for interval changes
+    const handleIntervalChange = () => {
+      setupAutoRefresh();
+    };
+    
+    window.addEventListener('autoRefreshIntervalChanged', handleIntervalChange);
+
+    // Cleanup on unmount
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+      window.removeEventListener('autoRefreshIntervalChanged', handleIntervalChange);
+    };
+  }, []); // Only run once on mount
 
   return (
     <CoursesContext.Provider value={{ courses, isLoading, error, refreshCourses, updateNickname, hideCourse }}>

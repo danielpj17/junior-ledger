@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Edit2, Save, X, Calendar, FileText, Loader2, AlertCircle, EyeOff, Trash2, Folder, ExternalLink, File } from 'lucide-react';
 import { fetchCourseAssignments, fetchCourseFiles, fetchCourseFolders, fetchFolderFiles, testFolderAccess, CanvasFile, CanvasFolder } from '../../actions/canvas';
-import { getCanvasToken } from '../../lib/courseStorage';
+import { getCanvasToken, getAutoRefreshInterval } from '../../lib/courseStorage';
 import { useCourses } from '../../components/CoursesProvider';
 import { motion, AnimatePresence } from 'framer-motion';
 import JuniorAssistant from '../../components/JuniorAssistant';
@@ -42,7 +42,7 @@ export default function CoursePage() {
     }
   }, [courseId]);
 
-  const loadAssignments = async () => {
+  const loadAssignments = useCallback(async () => {
     const token = getCanvasToken();
     if (!token) {
       setError('Canvas token not found. Please sync in Canvas Sync settings.');
@@ -60,7 +60,51 @@ export default function CoursePage() {
     } finally {
       setIsLoadingAssignments(false);
     }
+  }, [courseId]);
+
+  // Auto-refresh assignments on interval
+  const assignmentsIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  
+  const setupAutoRefresh = () => {
+    // Clear existing interval
+    if (assignmentsIntervalRef.current) {
+      clearInterval(assignmentsIntervalRef.current);
+      assignmentsIntervalRef.current = null;
+    }
+
+    const token = getCanvasToken();
+    if (!token || !courseId) return;
+
+    const intervalMinutes = getAutoRefreshInterval();
+    if (intervalMinutes <= 0) return; // Auto-refresh disabled
+
+    const intervalMs = intervalMinutes * 60 * 1000;
+
+    // Set up new interval
+    assignmentsIntervalRef.current = setInterval(() => {
+      loadAssignments();
+    }, intervalMs);
   };
+
+  useEffect(() => {
+    setupAutoRefresh();
+
+    // Listen for interval changes
+    const handleIntervalChange = () => {
+      setupAutoRefresh();
+    };
+    
+    window.addEventListener('autoRefreshIntervalChanged', handleIntervalChange);
+
+    // Cleanup on unmount or when dependencies change
+    return () => {
+      if (assignmentsIntervalRef.current) {
+        clearInterval(assignmentsIntervalRef.current);
+        assignmentsIntervalRef.current = null;
+      }
+      window.removeEventListener('autoRefreshIntervalChanged', handleIntervalChange);
+    };
+  }, [loadAssignments, courseId]);
 
   const loadFiles = async () => {
     const token = getCanvasToken();

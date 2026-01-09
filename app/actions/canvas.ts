@@ -186,6 +186,40 @@ export async function fetchFolderFiles(token: string, folderId: number): Promise
   }
 }
 
+/**
+ * Download a Canvas file and return it as base64 (server action to avoid CORS)
+ */
+export async function downloadCanvasFileAsBase64(
+  fileUrl: string,
+  fileName: string,
+  token: string
+): Promise<string | null> {
+  try {
+    const response = await fetch(fileUrl, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      console.warn(`Failed to download Canvas file ${fileName}: ${response.status}`);
+      return null;
+    }
+
+    // Convert response to buffer, then to base64
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const base64 = buffer.toString('base64');
+    const mimeType = response.headers.get('content-type') || 'application/octet-stream';
+    
+    // Return as data URL
+    return `data:${mimeType};base64,${base64}`;
+  } catch (error) {
+    console.error(`Error downloading Canvas file ${fileName}:`, error);
+    return null;
+  }
+}
+
 export async function testFolderAccess(token: string, folderId: number): Promise<boolean> {
   try {
     const response = await fetch(
@@ -308,7 +342,7 @@ export async function fetchCalendarEvents(
                   url: assignment.html_url || '',
                   html_url: assignment.html_url || '',
                   all_day: false,
-                  all_day_date: dateInfo.due_at ? dateInfo.due_at.split('T')[0] : null,
+                  all_day_date: null, // Don't use all_day_date for assignments - use start_at for proper timezone handling
                   created_at: assignment.created_at || '',
                   updated_at: assignment.updated_at || '',
                   type: 'assignment',
@@ -327,7 +361,7 @@ export async function fetchCalendarEvents(
                   url: assignment.html_url || '',
                   html_url: assignment.html_url || '',
                   all_day: false,
-                  all_day_date: assignment.due_at ? assignment.due_at.split('T')[0] : null,
+                  all_day_date: null, // Don't use all_day_date for assignments - use start_at for proper timezone handling
                   created_at: assignment.created_at || '',
                   updated_at: assignment.updated_at || '',
                   type: 'assignment',

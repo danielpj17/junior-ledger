@@ -25,13 +25,27 @@ export interface UploadedFile {
   courseId: number | null; // null for semester-wide documents
 }
 
+export interface CachedCanvasFile {
+  canvasId: number; // Canvas file ID
+  name: string;
+  type: string;
+  size: number;
+  data: string; // base64 encoded
+  url: string; // Original Canvas URL
+  modifiedAt: string; // Canvas file modification date
+  cachedAt: string; // When we cached it
+  courseId: number;
+}
+
 const NICKNAMES_STORAGE_KEY = 'junior-ledger-course-nicknames';
 const CANVAS_TOKEN_KEY = 'junior-ledger-canvas-token';
 const HIDDEN_COURSES_KEY = 'junior-ledger-hidden-courses';
 const CHAT_STORAGE_PREFIX = 'junior-ledger-chat-';
 const FILES_STORAGE_PREFIX = 'junior-ledger-files-';
+const CANVAS_FILES_STORAGE_PREFIX = 'junior-ledger-canvas-files-';
 const CALENDAR_COURSE_COLORS_KEY = 'junior-ledger-course-colors';
 const CALENDAR_SELECTED_COURSES_KEY = 'junior-ledger-calendar-selected-courses';
+const AUTO_REFRESH_INTERVAL_KEY = 'junior-ledger-auto-refresh-interval';
 
 // Get course nicknames from localStorage
 export function getCourseNicknames(): Record<number, string> {
@@ -269,6 +283,85 @@ export function deleteCourseFile(courseId: number | null, fileId: string): void 
   }
 }
 
+// Canvas File Caching Functions
+
+// Get cached Canvas files for a specific course
+export function getCachedCanvasFiles(courseId: number): CachedCanvasFile[] {
+  if (typeof window === 'undefined') return [];
+  
+  try {
+    const key = `${CANVAS_FILES_STORAGE_PREFIX}${courseId}`;
+    const stored = localStorage.getItem(key);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+}
+
+// Save cached Canvas files for a specific course
+export function saveCachedCanvasFiles(courseId: number, files: CachedCanvasFile[]): void {
+  if (typeof window === 'undefined') return;
+  
+  try {
+    const key = `${CANVAS_FILES_STORAGE_PREFIX}${courseId}`;
+    localStorage.setItem(key, JSON.stringify(files));
+  } catch (error) {
+    console.error('Error saving cached Canvas files:', error);
+    // If quota exceeded, provide helpful error
+    if (error instanceof DOMException && error.code === 22) {
+      throw new Error('Storage quota exceeded. Please clear some cached files to free up space.');
+    }
+    throw error;
+  }
+}
+
+// Add or update a cached Canvas file
+export function cacheCanvasFile(courseId: number, file: CachedCanvasFile): void {
+  if (typeof window === 'undefined') return;
+  
+  try {
+    const files = getCachedCanvasFiles(courseId);
+    const existingIndex = files.findIndex(f => f.canvasId === file.canvasId);
+    
+    if (existingIndex >= 0) {
+      // Update existing file
+      files[existingIndex] = file;
+    } else {
+      // Add new file
+      files.push(file);
+    }
+    
+    saveCachedCanvasFiles(courseId, files);
+  } catch (error) {
+    console.error('Error caching Canvas file:', error);
+    throw error;
+  }
+}
+
+// Get a cached Canvas file by Canvas ID
+export function getCachedCanvasFile(courseId: number, canvasId: number): CachedCanvasFile | null {
+  if (typeof window === 'undefined') return null;
+  
+  try {
+    const files = getCachedCanvasFiles(courseId);
+    return files.find(f => f.canvasId === canvasId) || null;
+  } catch {
+    return null;
+  }
+}
+
+// Clear cached Canvas files for a specific course
+export function clearCachedCanvasFiles(courseId: number): void {
+  if (typeof window === 'undefined') return;
+  
+  try {
+    const key = `${CANVAS_FILES_STORAGE_PREFIX}${courseId}`;
+    localStorage.removeItem(key);
+  } catch (error) {
+    console.error('Error clearing cached Canvas files:', error);
+  }
+}
+
 // Calendar Storage Functions
 
 // Get course colors from localStorage
@@ -322,5 +415,35 @@ export function saveCalendarSelectedCourses(selectedCourseIds: Set<number> | nul
     }
   } catch (error) {
     console.error('Error saving calendar selected courses:', error);
+  }
+}
+
+// Auto-Refresh Interval Functions
+
+// Get auto-refresh interval in minutes (default: 5 minutes, or 0 to disable)
+export function getAutoRefreshInterval(): number {
+  if (typeof window === 'undefined') return 5;
+  
+  try {
+    const stored = localStorage.getItem(AUTO_REFRESH_INTERVAL_KEY);
+    if (stored === null) return 5; // Default to 5 minutes
+    const interval = parseInt(stored, 10);
+    return isNaN(interval) || interval < 0 ? 5 : interval;
+  } catch {
+    return 5;
+  }
+}
+
+// Save auto-refresh interval in minutes (0 to disable)
+export function saveAutoRefreshInterval(intervalMinutes: number): void {
+  if (typeof window === 'undefined') return;
+  
+  try {
+    if (intervalMinutes < 0) {
+      intervalMinutes = 0;
+    }
+    localStorage.setItem(AUTO_REFRESH_INTERVAL_KEY, intervalMinutes.toString());
+  } catch (error) {
+    console.error('Error saving auto-refresh interval:', error);
   }
 }

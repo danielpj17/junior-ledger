@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Info, CheckCircle2, Loader2, Link as LinkIcon, Eye, EyeOff, Upload, File, Trash2, ExternalLink, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { saveCanvasToken, getCanvasToken, getHiddenCourses, showCourse } from '../lib/courseStorage';
+import { saveCanvasToken, getCanvasToken, getHiddenCourses, showCourse, getAutoRefreshInterval, saveAutoRefreshInterval } from '../lib/courseStorage';
 import { fetchCanvasCourses, CanvasCourse } from '../actions/canvas';
 import { useCourses } from '../components/CoursesProvider';
 import { getCourseFiles, addCourseFile, deleteCourseFile, UploadedFile } from '../lib/courseStorage';
@@ -29,6 +29,9 @@ export default function SettingsPage() {
   const [fileError, setFileError] = useState<string | null>(null);
   const { courses } = useCourses();
 
+  // Auto-refresh state
+  const [refreshInterval, setRefreshInterval] = useState<number>(5);
+
   useEffect(() => {
     // Load saved token if it exists
     const savedToken = getCanvasToken();
@@ -36,6 +39,8 @@ export default function SettingsPage() {
       setToken(savedToken);
     }
     loadHiddenCourses();
+    // Load saved auto-refresh interval
+    setRefreshInterval(getAutoRefreshInterval());
   }, []);
 
   useEffect(() => {
@@ -347,6 +352,61 @@ export default function SettingsPage() {
                 )}
               </div>
             </form>
+          </div>
+
+          {/* Auto-Refresh Settings */}
+          <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-6">
+            <h2 className="text-xl font-semibold text-[#002E5D] mb-2 flex items-center gap-2">
+              <Info className="w-5 h-5" />
+              Auto-Refresh Settings
+            </h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Configure how often the site automatically updates data from Canvas. Set to 0 to disable auto-refresh.
+            </p>
+            <div className="space-y-4">
+              <div>
+                <label
+                  htmlFor="refresh-interval"
+                  className="block text-sm font-semibold text-gray-700 mb-2"
+                >
+                  Refresh Interval (minutes)
+                </label>
+                <div className="flex items-center gap-4">
+                  <input
+                    type="number"
+                    id="refresh-interval"
+                    min="0"
+                    max="60"
+                    value={refreshInterval}
+                    onChange={(e) => {
+                      const value = parseInt(e.target.value, 10);
+                      if (!isNaN(value) && value >= 0) {
+                        setRefreshInterval(value);
+                        saveAutoRefreshInterval(value);
+                        // Trigger a page refresh to apply new interval (or use a custom event)
+                        window.dispatchEvent(new CustomEvent('autoRefreshIntervalChanged', { detail: { interval: value } }));
+                      }
+                    }}
+                    className="w-24 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002E5D] focus:border-transparent"
+                  />
+                  <div className="flex-1">
+                    {refreshInterval === 0 ? (
+                      <p className="text-sm text-gray-600">Auto-refresh disabled</p>
+                    ) : (
+                      <p className="text-sm text-gray-600">
+                        Data will refresh every {refreshInterval} minute{refreshInterval !== 1 ? 's' : ''}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div className="mt-3 bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <p className="text-xs text-blue-800">
+                    <strong>Note:</strong> Changes to the refresh interval may require a page refresh to take full effect. 
+                    The interval applies to courses, calendar events, and assignments.
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Hidden Courses Section */}

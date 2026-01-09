@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Calendar as CalendarIcon, Loader2, AlertCircle, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getCanvasToken } from '../lib/courseStorage';
+import { getCanvasToken, getAutoRefreshInterval } from '../lib/courseStorage';
 import { fetchCalendarEvents, CanvasCalendarEvent, fetchCourseColors } from '../actions/canvas';
 import { useCourses } from '../components/CoursesProvider';
 import { getCourseColors, saveCourseColors, getCalendarSelectedCourses, saveCalendarSelectedCourses } from '../lib/courseStorage';
@@ -72,60 +72,104 @@ export default function CalendarPage() {
   }, [courses]);
 
   // Fetch calendar events
-  useEffect(() => {
-    const loadCalendarEvents = async () => {
-      const token = getCanvasToken();
-      if (!token || courses.length === 0) {
-        setEvents([]);
-        return;
-      }
+  const loadCalendarEvents = useCallback(async () => {
+    const token = getCanvasToken();
+    if (!token || courses.length === 0) {
+      setEvents([]);
+      return;
+    }
 
-      // Determine which courses to fetch
-      // null means all courses are selected (default), empty Set means none selected
-      const coursesToFetch = selectedCourses === null 
-        ? new Set(courses.map(c => c.canvasId))
-        : selectedCourses;
+    // Determine which courses to fetch
+    // null means all courses are selected (default), empty Set means none selected
+    const coursesToFetch = selectedCourses === null 
+      ? new Set(courses.map(c => c.canvasId))
+      : selectedCourses;
+    
+    // Don't fetch if no courses are selected
+    if (coursesToFetch.size === 0) {
+      setEvents([]);
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // Calculate date range (current month ± 1 month)
+      const startDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
+      const endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 2, 0);
       
-      // Don't fetch if no courses are selected
-      if (coursesToFetch.size === 0) {
-        setEvents([]);
-        setIsLoading(false);
-        return;
-      }
+      const startDateStr = startDate.toISOString().split('T')[0];
+      const endDateStr = endDate.toISOString().split('T')[0];
 
-      setIsLoading(true);
-      setError(null);
+      // Build context codes for selected courses
+      const contextCodes = Array.from(coursesToFetch).map(id => `course_${id}`);
 
-      try {
-        // Calculate date range (current month ± 1 month)
-        const startDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
-        const endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 2, 0);
-        
-        const startDateStr = startDate.toISOString().split('T')[0];
-        const endDateStr = endDate.toISOString().split('T')[0];
-
-        // Build context codes for selected courses
-        const contextCodes = Array.from(coursesToFetch).map(id => `course_${id}`);
-
-        const calendarEvents = await fetchCalendarEvents(
-          token,
-          startDateStr,
-          endDateStr,
-          contextCodes
-        );
-        setEvents(calendarEvents);
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Failed to load calendar events';
-        setError(errorMessage);
-        console.error('Error loading calendar events:', err);
-        setEvents([]);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadCalendarEvents();
+      const calendarEvents = await fetchCalendarEvents(
+        token,
+        startDateStr,
+        endDateStr,
+        contextCodes
+      );
+      setEvents(calendarEvents);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load calendar events';
+      setError(errorMessage);
+      console.error('Error loading calendar events:', err);
+      setEvents([]);
+    } finally {
+      setIsLoading(false);
+    }
   }, [currentDate, courses, selectedCourses]);
+
+  useEffect(() => {
+    loadCalendarEvents();
+  }, [loadCalendarEvents]);
+
+  // Auto-refresh calendar events on interval
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  
+  const setupAutoRefresh = () => {
+    // Clear existing interval
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+
+    const token = getCanvasToken();
+    if (!token || courses.length === 0) return;
+
+    const intervalMinutes = getAutoRefreshInterval();
+    if (intervalMinutes <= 0) return; // Auto-refresh disabled
+
+    const intervalMs = intervalMinutes * 60 * 1000;
+
+    // Set up new interval
+    intervalRef.current = setInterval(() => {
+      loadCalendarEvents();
+    }, intervalMs);
+  };
+
+  useEffect(() => {
+    setupAutoRefresh();
+
+    // Listen for interval changes
+    const handleIntervalChange = () => {
+      setupAutoRefresh();
+    };
+    
+    window.addEventListener('autoRefreshIntervalChanged', handleIntervalChange);
+
+    // Cleanup on unmount or when dependencies change
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+      window.removeEventListener('autoRefreshIntervalChanged', handleIntervalChange);
+    };
+  }, [loadCalendarEvents, courses.length]); // Re-setup interval when load function or courses change
 
   // Toggle course selection
   const toggleCourseSelection = (courseId: number) => {
@@ -161,12 +205,30 @@ export default function CalendarPage() {
     });
   }, [events, selectedCourses]);
 
-  // Group events by date
+  // Helper function to get local date string from ISO string
+  const getLocalDateString = (isoString: string): string => {
+    const date = new Date(isoString);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  // Group events by date (using local timezone)
   const eventsByDate = useMemo(() => {
     const grouped: Record<string, CanvasCalendarEvent[]> = {};
     
     filteredEvents.forEach(event => {
-      const dateKey = event.all_day_date || event.start_at.split('T')[0];
+      // Use all_day_date if available, otherwise parse start_at in local timezone
+      let dateKey: string;
+      if (event.all_day_date) {
+        dateKey = event.all_day_date;
+      } else if (event.start_at) {
+        dateKey = getLocalDateString(event.start_at);
+      } else {
+        return; // Skip events without a date
+      }
+      
       if (!grouped[dateKey]) {
         grouped[dateKey] = [];
       }
@@ -262,6 +324,34 @@ export default function CalendarPage() {
     return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   };
 
+  // Format time display for events - show deadline if start and end are the same
+  const formatEventTime = (event: CanvasCalendarEvent): string => {
+    if (event.all_day) {
+      return 'All Day';
+    }
+    
+    if (!event.start_at) {
+      return '';
+    }
+
+    // Check if start and end times are essentially the same (within 1 minute)
+    if (event.end_at) {
+      const startTime = new Date(event.start_at).getTime();
+      const endTime = new Date(event.end_at).getTime();
+      const diffMinutes = Math.abs(endTime - startTime) / (1000 * 60);
+      
+      // If they're the same or very close (like same minute), treat as deadline
+      if (diffMinutes < 2) {
+        return `Due at ${formatTime(event.start_at)}`;
+      }
+      
+      return `${formatTime(event.start_at)} - ${formatTime(event.end_at)}`;
+    }
+    
+    // No end time, just show start time as deadline
+    return `Due at ${formatTime(event.start_at)}`;
+  };
+
   // Get selected date's events (defaults to today)
   const selectedDateEvents = useMemo(() => {
     return eventsByDate[selectedDate] || [];
@@ -343,14 +433,9 @@ export default function CalendarPage() {
                           </span>
                         )}
                       </div>
-                      {event.all_day ? (
-                        <p className="text-sm text-gray-600">All Day</p>
-                      ) : (
-                        <p className="text-sm text-gray-600">
-                          {formatTime(event.start_at)}
-                          {event.end_at && ` - ${formatTime(event.end_at)}`}
-                        </p>
-                      )}
+                      <p className="text-sm text-gray-600">
+                        {formatEventTime(event)}
+                      </p>
                       {event.location_name && (
                         <p className="text-sm text-gray-500 mt-1">
                           📍 {event.location_name}
@@ -539,7 +624,7 @@ export default function CalendarPage() {
                               <>
                                 <span className="font-medium">{event.title}</span>
                                 {' '}
-                                <span className="text-gray-600">{formatTime(event.start_at)}</span>
+                                <span className="text-gray-600 text-xs">{formatEventTime(event)}</span>
                               </>
                             )}
                           </div>
@@ -611,14 +696,9 @@ export default function CalendarPage() {
                                     </span>
                                   )}
                                 </div>
-                                {event.all_day ? (
-                                  <p className="text-sm text-gray-600">All Day</p>
-                                ) : (
-                                  <p className="text-sm text-gray-600">
-                                    {formatTime(event.start_at)}
-                                    {event.end_at && ` - ${formatTime(event.end_at)}`}
-                                  </p>
-                                )}
+                                <p className="text-sm text-gray-600">
+                                  {formatEventTime(event)}
+                                </p>
                                 {event.location_name && (
                                   <p className="text-sm text-gray-500 mt-1">
                                     📍 {event.location_name}

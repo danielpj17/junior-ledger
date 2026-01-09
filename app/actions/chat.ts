@@ -4,11 +4,17 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || process.env.GOOGLE_AI_API_KEY || '');
 
+export interface FileContext {
+  fileName: string;
+  text: string;
+}
+
 export async function sendChatMessage(
   message: string,
   tutorMode: boolean,
   courseId?: number,
-  courseNickname?: string
+  courseNickname?: string,
+  fileContexts?: FileContext[]
 ): Promise<string> {
   try {
     const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY || process.env.GOOGLE_AI_API_KEY;
@@ -43,14 +49,29 @@ export async function sendChatMessage(
 
     let systemPrompt = '';
     
+    // Build file context string if files are provided
+    let fileContextString = '';
+    if (courseId && fileContexts && fileContexts.length > 0) {
+      const contextSections = fileContexts.map(file => {
+        // Limit each file's text to avoid token limits (first 10000 characters per file)
+        // If file is very long, we'll truncate but keep important context
+        const truncatedText = file.text.length > 10000 
+          ? file.text.substring(0, 10000) + '\n\n... (content truncated for length)'
+          : file.text;
+        return `\n\n--- Content from file: ${file.fileName} ---\n${truncatedText}\n--- End of ${file.fileName} ---`;
+      }).join('\n');
+      
+      fileContextString = `\n\nRELEVANT COURSE DOCUMENTS:\n${contextSections}\n\nWhen answering questions, use the information from these course documents as your primary source. If information is not found in these documents, state that clearly and provide general guidance based on ${courseNickname || 'accounting'} principles.`;
+    }
+    
     if (courseId && courseNickname) {
       // Course-specific assistant
-      const courseContext = `You are the ${courseNickname} Junior Assistant for a BYU Accounting student. You specialize in helping with ${courseNickname} coursework.`;
+      const courseContext = `You are the ${courseNickname} Junior Assistant for a BYU Accounting student. You specialize in helping with ${courseNickname} coursework.${fileContexts && fileContexts.length > 0 ? ' You have access to course documents that should be your primary source of information.' : ''}`;
       
       if (tutorMode) {
-        systemPrompt = `${courseContext} Tutor Mode is ON. Do not give direct answers. Instead, ask Socratic questions to help the student find the answer themselves using GAAP principles and ${courseNickname} concepts. Guide them through their thinking process step by step.`;
+        systemPrompt = `${courseContext} Tutor Mode is ON. Do not give direct answers. Instead, ask Socratic questions to help the student find the answer themselves using GAAP principles and ${courseNickname} concepts. Guide them through their thinking process step by step.${fileContextString}`;
       } else {
-        systemPrompt = `${courseContext} Tutor Mode is OFF. Give concise, professional accounting explanations related to ${courseNickname}. Be helpful and clear while maintaining academic rigor.`;
+        systemPrompt = `${courseContext} Tutor Mode is OFF. Give concise, professional accounting explanations related to ${courseNickname}. Be helpful and clear while maintaining academic rigor.${fileContextString}`;
       }
     } else {
       // General assistant
