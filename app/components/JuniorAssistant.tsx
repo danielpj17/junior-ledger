@@ -113,14 +113,12 @@ export default function JuniorAssistant({ courseId, courseNickname }: JuniorAssi
             if (!cachedFile) {
               // New file - needs to be downloaded
               filesToDownload.push(canvasFile);
-              hasNewOrUpdatedFiles = true;
             } else {
               // Check if file has been updated
               const cachedModifiedAt = new Date(cachedFile.modifiedAt).getTime();
               if (fileModifiedAt > cachedModifiedAt) {
                 // File has been updated - needs to be re-downloaded
                 filesToDownload.push(canvasFile);
-                hasNewOrUpdatedFiles = true;
               } else {
                 // File is up to date - use cached version
                 filesToUse.push(cachedFile);
