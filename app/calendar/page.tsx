@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Calendar as CalendarIcon, Loader2, AlertCircle, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getCanvasToken, getAutoRefreshInterval, getGoogleCalendarFeedUrl } from '../lib/courseStorage';
+import { getCanvasToken, getAutoRefreshInterval, getGoogleCalendarFeedUrl, getGoogleCalendarSelected, saveGoogleCalendarSelected } from '../lib/courseStorage';
 import { fetchCalendarEvents, CanvasCalendarEvent, fetchCourseColors } from '../actions/canvas';
 import { fetchGoogleCalendarEvents } from '../actions/googleCalendar';
 import { useCourses } from '../components/CoursesProvider';
@@ -16,6 +16,7 @@ export default function CalendarPage() {
   const [error, setError] = useState<string | null>(null);
   const [courseColors, setCourseColors] = useState<Record<number, string>>({});
   const [selectedCourses, setSelectedCourses] = useState<Set<number> | null>(null);
+  const [googleCalendarSelected, setGoogleCalendarSelected] = useState<boolean>(true);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
@@ -28,6 +29,9 @@ export default function CalendarPage() {
       // Default: all courses selected
       setSelectedCourses(new Set(courses.map(c => c.canvasId)));
     }
+    
+    // Initialize Google Calendar selection
+    setGoogleCalendarSelected(getGoogleCalendarSelected());
   }, [courses]);
 
   // Load course colors from storage and fetch from Canvas if needed
@@ -113,21 +117,23 @@ export default function CalendarPage() {
         }
       }
 
-      // Fetch Google Calendar events if URL is configured
-      const googleCalUrl = getGoogleCalendarFeedUrl();
-      if (googleCalUrl && googleCalUrl.trim() !== '') {
-        try {
-          const googleEvents = await fetchGoogleCalendarEvents(
-            googleCalUrl,
-            startDateStr,
-            endDateStr
-          );
-          allEvents.push(...googleEvents);
-        } catch (err) {
-          console.error('Error fetching Google Calendar events:', err);
-          // Show error but don't block other events from displaying
-          const errorMessage = err instanceof Error ? err.message : 'Failed to load Google Calendar events';
-          setError(errorMessage);
+      // Fetch Google Calendar events if URL is configured and selected
+      if (googleCalendarSelected) {
+        const googleCalUrl = getGoogleCalendarFeedUrl();
+        if (googleCalUrl && googleCalUrl.trim() !== '') {
+          try {
+            const googleEvents = await fetchGoogleCalendarEvents(
+              googleCalUrl,
+              startDateStr,
+              endDateStr
+            );
+            allEvents.push(...googleEvents);
+          } catch (err) {
+            console.error('Error fetching Google Calendar events:', err);
+            // Show error but don't block other events from displaying
+            const errorMessage = err instanceof Error ? err.message : 'Failed to load Google Calendar events';
+            setError(errorMessage);
+          }
         }
       }
 
@@ -147,7 +153,7 @@ export default function CalendarPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [currentDate, courses, selectedCourses]);
+  }, [currentDate, courses, selectedCourses, googleCalendarSelected]);
 
   useEffect(() => {
     loadCalendarEvents();
@@ -211,6 +217,13 @@ export default function CalendarPage() {
     saveCalendarSelectedCourses(newSelected);
   };
 
+  // Toggle Google Calendar selection
+  const toggleGoogleCalendarSelection = () => {
+    const newSelected = !googleCalendarSelected;
+    setGoogleCalendarSelected(newSelected);
+    saveGoogleCalendarSelected(newSelected);
+  };
+
   // Get course color with fallback
   const getCourseColor = (courseId: number): string => {
     return courseColors[courseId] || '#002E5D'; // Default BYU blue
@@ -232,18 +245,20 @@ export default function CalendarPage() {
     return event.type === 'google-calendar-exam';
   }, []);
 
-  // Filter events by selected courses (Google Calendar events are always included)
+  // Filter events by selected courses and Google Calendar selection
   const filteredEvents = useMemo(() => {
     if (!selectedCourses) return events;
     return events.filter(event => {
-      // Always include Google Calendar events (including exams)
-      if (event.type === 'google-calendar' || event.type === 'google-calendar-exam' || event.context_code === 'google_calendar') return true;
+      // Filter Google Calendar events by selection
+      if (event.type === 'google-calendar' || event.type === 'google-calendar-exam' || event.context_code === 'google_calendar') {
+        return googleCalendarSelected;
+      }
       
       // Filter Canvas events by selected courses
       const courseId = getCourseIdFromContext(event.context_code);
       return courseId !== null && selectedCourses.has(courseId);
     });
-  }, [events, selectedCourses]);
+  }, [events, selectedCourses, googleCalendarSelected]);
 
   // Helper function to get local date string from ISO string
   const getLocalDateString = (isoString: string): string => {
@@ -532,47 +547,83 @@ export default function CalendarPage() {
       {/* Course Selection Panel */}
       <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-6">
         <h2 className="text-xl font-semibold text-[#002E5D] mb-4">
-          Select Courses to Display
+          Select Calendars to Display
         </h2>
-        {courses.length === 0 ? (
-          <p className="text-gray-500">No courses available. Please sync your Canvas account in Settings.</p>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {courses.map((course) => {
-              const isSelected = isCourseSelected(course.canvasId);
-              const color = getCourseColor(course.canvasId);
-              
-              return (
-                <button
-                  key={course.canvasId}
-                  onClick={() => toggleCourseSelection(course.canvasId)}
-                  className={`flex items-center gap-3 p-3 rounded-lg border-2 transition-all ${
-                    isSelected
-                      ? 'border-[#002E5D] bg-blue-50'
-                      : 'border-gray-200 bg-white hover:border-gray-300'
-                  }`}
-                >
-                  <div
-                    className="w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors"
-                    style={{
-                      backgroundColor: isSelected ? color : 'white',
-                      borderColor: color,
-                    }}
-                  >
-                    {isSelected && (
-                      <Check className="w-3 h-3 text-white" strokeWidth={3} />
-                    )}
-                  </div>
-                  <span className={`text-sm font-medium flex-1 text-left ${
-                    isSelected ? 'text-gray-900' : 'text-gray-500'
-                  }`}>
-                    {course.nickname}
-                  </span>
-                </button>
-              );
-            })}
+        
+        {/* Google Calendar Toggle */}
+        {getGoogleCalendarFeedUrl() && (
+          <div className="mb-4 pb-4 border-b border-gray-200">
+            <button
+              onClick={toggleGoogleCalendarSelection}
+              className={`flex items-center gap-3 p-3 rounded-lg border-2 transition-all w-full ${
+                googleCalendarSelected
+                  ? 'border-[#4285F4] bg-blue-50'
+                  : 'border-gray-200 bg-white hover:border-gray-300'
+              }`}
+            >
+              <div
+                className="w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors"
+                style={{
+                  backgroundColor: googleCalendarSelected ? '#4285F4' : 'white',
+                  borderColor: '#4285F4',
+                }}
+              >
+                {googleCalendarSelected && (
+                  <Check className="w-3 h-3 text-white" strokeWidth={3} />
+                )}
+              </div>
+              <span className={`text-sm font-medium flex-1 text-left ${
+                googleCalendarSelected ? 'text-gray-900' : 'text-gray-500'
+              }`}>
+                📅 Google Calendar
+              </span>
+            </button>
           </div>
         )}
+        
+        {/* Canvas Courses */}
+        <div>
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">Canvas Courses</h3>
+          {courses.length === 0 ? (
+            <p className="text-gray-500">No courses available. Please sync your Canvas account in Settings.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {courses.map((course) => {
+                const isSelected = isCourseSelected(course.canvasId);
+                const color = getCourseColor(course.canvasId);
+                
+                return (
+                  <button
+                    key={course.canvasId}
+                    onClick={() => toggleCourseSelection(course.canvasId)}
+                    className={`flex items-center gap-3 p-3 rounded-lg border-2 transition-all ${
+                      isSelected
+                        ? 'border-[#002E5D] bg-blue-50'
+                        : 'border-gray-200 bg-white hover:border-gray-300'
+                    }`}
+                  >
+                    <div
+                      className="w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors"
+                      style={{
+                        backgroundColor: isSelected ? color : 'white',
+                        borderColor: color,
+                      }}
+                    >
+                      {isSelected && (
+                        <Check className="w-3 h-3 text-white" strokeWidth={3} />
+                      )}
+                    </div>
+                    <span className={`text-sm font-medium flex-1 text-left ${
+                      isSelected ? 'text-gray-900' : 'text-gray-500'
+                    }`}>
+                      {course.nickname}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Error Message */}

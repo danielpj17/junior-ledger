@@ -1,23 +1,90 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useCourses } from './CoursesProvider';
+import { fetchCourseAssignments } from '../actions/canvas';
+import { getCanvasToken } from '../lib/courseStorage';
 
 export default function DaysUntilExam() {
   const [daysUntil, setDaysUntil] = useState<number | null>(null);
+  const [examName, setExamName] = useState<string | null>(null);
+  const { courses } = useCourses();
 
   useEffect(() => {
-    // Set exam date to a future date (e.g., end of semester)
-    // You can customize this date
-    const examDate = new Date('2024-12-15');
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    examDate.setHours(0, 0, 0, 0);
-    
-    const diffTime = examDate.getTime() - today.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
-    setDaysUntil(Math.max(0, diffDays));
-  }, []);
+    const fetchExams = async () => {
+      const token = getCanvasToken();
+      if (!token || courses.length === 0) {
+        setDaysUntil(null);
+        return;
+      }
+
+      try {
+        // Fetch all assignments from all courses
+        const allAssignments = await Promise.all(
+          courses.map(async (course) => {
+            try {
+              const assignments = await fetchCourseAssignments(token, course.canvasId);
+              return assignments.map((assignment: any) => ({
+                ...assignment,
+                courseName: course.nickname,
+              }));
+            } catch (error) {
+              console.error(`Error fetching assignments for course ${course.canvasId}:`, error);
+              return [];
+            }
+          })
+        );
+
+        // Flatten the array of assignments
+        const flatAssignments = allAssignments.flat();
+
+        // Filter for exams (assignments containing "exam" or "final" in the name, case-insensitive)
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const upcomingExams = flatAssignments
+          .filter((assignment: any) => {
+            if (!assignment.due_at) return false;
+            const assignmentName = (assignment.name || '').toLowerCase();
+            const isExam = assignmentName.includes('exam') || 
+                          assignmentName.includes('final') ||
+                          assignmentName.includes('midterm') ||
+                          assignmentName.includes('test');
+            if (!isExam) return false;
+            
+            const dueDate = new Date(assignment.due_at);
+            dueDate.setHours(0, 0, 0, 0);
+            return dueDate >= today;
+          })
+          .sort((a: any, b: any) => {
+            const dateA = new Date(a.due_at).getTime();
+            const dateB = new Date(b.due_at).getTime();
+            return dateA - dateB;
+          });
+
+        if (upcomingExams.length > 0) {
+          const nearestExam = upcomingExams[0];
+          const examDate = new Date(nearestExam.due_at);
+          examDate.setHours(0, 0, 0, 0);
+          
+          const diffTime = examDate.getTime() - today.getTime();
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          
+          setDaysUntil(Math.max(0, diffDays));
+          setExamName(nearestExam.name);
+        } else {
+          setDaysUntil(null);
+          setExamName(null);
+        }
+      } catch (error) {
+        console.error('Error fetching exams:', error);
+        setDaysUntil(null);
+        setExamName(null);
+      }
+    };
+
+    fetchExams();
+  }, [courses]);
 
   if (daysUntil === null) {
     return null;
@@ -28,7 +95,11 @@ export default function DaysUntilExam() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold mb-1">Days Until Exam</h2>
-          <p className="text-white/80 text-sm">Final exams approaching</p>
+          {examName ? (
+            <p className="text-white/80 text-sm">{examName}</p>
+          ) : (
+            <p className="text-white/80 text-sm">Final exams approaching</p>
+          )}
         </div>
         <div className="text-6xl font-bold text-[#FFD700]">
           {daysUntil}

@@ -52,16 +52,19 @@ export async function sendChatMessage(
     // Build file context string if files are provided
     let fileContextString = '';
     if (courseId && fileContexts && fileContexts.length > 0) {
-      const contextSections = fileContexts.map(file => {
+      const contextSections = fileContexts.map((file, index) => {
         // Limit each file's text to avoid token limits (first 10000 characters per file)
         // If file is very long, we'll truncate but keep important context
         const truncatedText = file.text.length > 10000 
           ? file.text.substring(0, 10000) + '\n\n... (content truncated for length)'
           : file.text;
-        return `\n\n--- Content from file: ${file.fileName} ---\n${truncatedText}\n--- End of ${file.fileName} ---`;
+        const fileNumber = index + 1;
+        return `\n\n--- File ${fileNumber}: ${file.fileName} ---\n${truncatedText}\n--- End of File ${fileNumber}: ${file.fileName} ---`;
       }).join('\n');
       
-      fileContextString = `\n\nRELEVANT COURSE DOCUMENTS:\n${contextSections}\n\nWhen answering questions, use the information from these course documents as your primary source. If information is not found in these documents, state that clearly and provide general guidance based on ${courseNickname || 'accounting'} principles.`;
+      const citationInstruction = `\n\nIMPORTANT CITATION FORMAT: When you reference information from the course documents above, cite your sources using numbered citations in square brackets. For example, if you use information from File 1, include [1] after the relevant statement. If you use information from File 2, include [2], and so on. You can cite multiple sources like [1][2] if information comes from multiple files. Always cite sources when using specific information, data, or quotes from the provided documents.`;
+      
+      fileContextString = `\n\nRELEVANT COURSE DOCUMENTS:\n${contextSections}\n\nWhen answering questions, use the information from these course documents as your primary source. If information is not found in these documents, state that clearly and provide general guidance based on ${courseNickname || 'accounting'} principles.${citationInstruction}`;
     }
     
     if (courseId && courseNickname) {

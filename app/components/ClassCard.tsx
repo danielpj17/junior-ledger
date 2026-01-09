@@ -1,15 +1,95 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { BookOpen } from 'lucide-react';
+import { BookOpen, Loader2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { fetchCourseAssignments } from '../actions/canvas';
+import { getCanvasToken } from '../lib/courseStorage';
 
 interface ClassCardProps {
   name: string;
   courseCode?: string;
+  courseId: number;
   index: number;
 }
 
-export default function ClassCard({ name, courseCode, index }: ClassCardProps) {
+interface NextAssignment {
+  name: string;
+  dueDate: string;
+}
+
+export default function ClassCard({ name, courseCode, courseId, index }: ClassCardProps) {
+  const [nextAssignment, setNextAssignment] = useState<NextAssignment | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchNextAssignment = async () => {
+      const token = getCanvasToken();
+      if (!token) {
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const assignments = await fetchCourseAssignments(token, courseId);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        // Filter for upcoming assignments with due dates
+        const upcomingAssignments = assignments
+          .filter((assignment: any) => {
+            if (!assignment.due_at) return false;
+            const dueDate = new Date(assignment.due_at);
+            dueDate.setHours(0, 0, 0, 0);
+            return dueDate >= today;
+          })
+          .sort((a: any, b: any) => {
+            const dateA = new Date(a.due_at).getTime();
+            const dateB = new Date(b.due_at).getTime();
+            return dateA - dateB;
+          });
+
+        if (upcomingAssignments.length > 0) {
+          const next = upcomingAssignments[0];
+          setNextAssignment({
+            name: next.name,
+            dueDate: next.due_at,
+          });
+        } else {
+          setNextAssignment(null);
+        }
+      } catch (error) {
+        console.error(`Error fetching assignments for course ${courseId}:`, error);
+        setNextAssignment(null);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchNextAssignment();
+  }, [courseId]);
+
+  const formatDueDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const dueDate = new Date(date);
+    dueDate.setHours(0, 0, 0, 0);
+
+    const diffTime = dueDate.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) {
+      return 'Today';
+    } else if (diffDays === 1) {
+      return 'Tomorrow';
+    } else if (diffDays <= 7) {
+      return `In ${diffDays} days`;
+    } else {
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -32,7 +112,19 @@ export default function ClassCard({ name, courseCode, index }: ClassCardProps) {
       </div>
       <div className="border-t border-gray-100 pt-4">
         <p className="text-sm text-gray-500 mb-1">Next Deadline</p>
-        <p className="text-gray-400 text-sm italic">No upcoming deadlines</p>
+        {isLoading ? (
+          <div className="flex items-center gap-2 text-gray-400 text-sm">
+            <Loader2 className="w-3 h-3 animate-spin" />
+            <span>Loading...</span>
+          </div>
+        ) : nextAssignment ? (
+          <div>
+            <p className="text-sm font-medium text-gray-900 line-clamp-1">{nextAssignment.name}</p>
+            <p className="text-xs text-gray-500 mt-0.5">{formatDueDate(nextAssignment.dueDate)}</p>
+          </div>
+        ) : (
+          <p className="text-gray-400 text-sm italic">No upcoming deadlines</p>
+        )}
       </div>
     </motion.div>
   );

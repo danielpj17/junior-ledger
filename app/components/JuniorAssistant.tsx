@@ -7,6 +7,7 @@ import { sendChatMessage, FileContext } from '../actions/chat';
 import { getCourseChatMessages, saveCourseChatMessages, ChatMessage, getCourseFiles, getCanvasToken, getCachedCanvasFiles, cacheCanvasFile, getCachedCanvasFile, CachedCanvasFile } from '../lib/courseStorage';
 import { extractTextFromFiles, canvasFileToExtractionFormat, isFileTypeSupported } from '../lib/fileExtraction';
 import { fetchCourseFiles, fetchCourseFolders, fetchFolderFiles, downloadCanvasFileAsBase64, CanvasFile } from '../actions/canvas';
+import MessageContent from './MessageContent';
 
 interface JuniorAssistantProps {
   courseId?: number;
@@ -386,7 +387,11 @@ export default function JuniorAssistant({ courseId, courseNickname }: JuniorAssi
                     : 'bg-gray-100 text-gray-800'
                 }`}
               >
-                <p className="text-sm whitespace-pre-wrap">{message.text}</p>
+                {message.sender === 'assistant' ? (
+                  <MessageContent text={message.text} fileContexts={courseId ? fileContexts : undefined} />
+                ) : (
+                  <p className="text-sm whitespace-pre-wrap">{message.text}</p>
+                )}
               </div>
             </motion.div>
           ))}

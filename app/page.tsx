@@ -45,6 +45,7 @@ export default function Home() {
                   <ClassCard 
                     name={course.nickname} 
                     courseCode={course.courseCode}
+                    courseId={course.canvasId}
                     index={index} 
                   />
                 </Link>

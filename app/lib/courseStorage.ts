@@ -47,6 +47,7 @@ const CALENDAR_COURSE_COLORS_KEY = 'junior-ledger-course-colors';
 const CALENDAR_SELECTED_COURSES_KEY = 'junior-ledger-calendar-selected-courses';
 const AUTO_REFRESH_INTERVAL_KEY = 'junior-ledger-auto-refresh-interval';
 const GOOGLE_CALENDAR_FEED_URL_KEY = 'junior-ledger-google-cal-url';
+const GOOGLE_CALENDAR_SELECTED_KEY = 'junior-ledger-google-cal-selected';
 
 // Get course nicknames from localStorage
 export function getCourseNicknames(): Record<number, string> {
@@ -469,10 +470,52 @@ export function saveGoogleCalendarFeedUrl(url: string): void {
   try {
     if (url.trim() === '') {
       localStorage.removeItem(GOOGLE_CALENDAR_FEED_URL_KEY);
+      // Also unselect Google Calendar if URL is removed
+      localStorage.removeItem(GOOGLE_CALENDAR_SELECTED_KEY);
     } else {
       localStorage.setItem(GOOGLE_CALENDAR_FEED_URL_KEY, url.trim());
+      // Default to selected when URL is added
+      if (!localStorage.getItem(GOOGLE_CALENDAR_SELECTED_KEY)) {
+        localStorage.setItem(GOOGLE_CALENDAR_SELECTED_KEY, 'true');
+      }
     }
   } catch (error) {
     console.error('Error saving Google Calendar feed URL:', error);
+  }
+}
+
+// Google Calendar Selection Functions
+
+// Get Google Calendar selection state (defaults to true if URL exists)
+export function getGoogleCalendarSelected(): boolean {
+  if (typeof window === 'undefined') return false;
+  
+  try {
+    const url = localStorage.getItem(GOOGLE_CALENDAR_FEED_URL_KEY);
+    if (!url) return false; // Can't be selected if no URL
+    
+    const stored = localStorage.getItem(GOOGLE_CALENDAR_SELECTED_KEY);
+    if (stored === null) {
+      // Default to true (selected) if not set
+      return true;
+    }
+    return stored === 'true';
+  } catch {
+    return false;
+  }
+}
+
+// Save Google Calendar selection state
+export function saveGoogleCalendarSelected(selected: boolean): void {
+  if (typeof window === 'undefined') return;
+  
+  try {
+    if (selected) {
+      localStorage.setItem(GOOGLE_CALENDAR_SELECTED_KEY, 'true');
+    } else {
+      localStorage.setItem(GOOGLE_CALENDAR_SELECTED_KEY, 'false');
+    }
+  } catch (error) {
+    console.error('Error saving Google Calendar selection:', error);
   }
 }
