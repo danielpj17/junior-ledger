@@ -48,6 +48,8 @@ const CALENDAR_SELECTED_COURSES_KEY = 'junior-ledger-calendar-selected-courses';
 const AUTO_REFRESH_INTERVAL_KEY = 'junior-ledger-auto-refresh-interval';
 const GOOGLE_CALENDAR_FEED_URL_KEY = 'junior-ledger-google-cal-url';
 const GOOGLE_CALENDAR_SELECTED_KEY = 'junior-ledger-google-cal-selected';
+const ASSIGNMENTS_STORAGE_PREFIX = 'junior-ledger-assignments-';
+const EXTRACTED_TEXT_STORAGE_PREFIX = 'junior-ledger-extracted-text-';
 
 // Get course nicknames from localStorage
 export function getCourseNicknames(): Record<number, string> {
@@ -517,5 +519,136 @@ export function saveGoogleCalendarSelected(selected: boolean): void {
     }
   } catch (error) {
     console.error('Error saving Google Calendar selection:', error);
+  }
+}
+
+// Assignment Caching Functions
+
+export interface CachedAssignment {
+  id: number;
+  name: string;
+  due_at: string | null;
+  course_id: number;
+  cachedAt: string; // When we cached it
+}
+
+export interface CachedAssignments {
+  assignments: CachedAssignment[];
+  cachedAt: string;
+}
+
+// Get cached assignments for a specific course
+export function getCachedAssignments(courseId: number): CachedAssignments | null {
+  if (typeof window === 'undefined') return null;
+  
+  try {
+    const key = `${ASSIGNMENTS_STORAGE_PREFIX}${courseId}`;
+    const stored = localStorage.getItem(key);
+    if (!stored) return null;
+    
+    const cached = JSON.parse(stored) as CachedAssignments;
+    // Check if cache is older than 5 minutes
+    const cacheAge = Date.now() - new Date(cached.cachedAt).getTime();
+    if (cacheAge > 5 * 60 * 1000) { // 5 minutes
+      return null; // Cache expired
+    }
+    return cached;
+  } catch {
+    return null;
+  }
+}
+
+// Save cached assignments for a specific course
+export function saveCachedAssignments(courseId: number, assignments: any[]): void {
+  if (typeof window === 'undefined') return;
+  
+  try {
+    const key = `${ASSIGNMENTS_STORAGE_PREFIX}${courseId}`;
+    const cached: CachedAssignments = {
+      assignments: assignments.map((assignment: any) => ({
+        id: assignment.id,
+        name: assignment.name,
+        due_at: assignment.due_at,
+        course_id: courseId,
+        cachedAt: new Date().toISOString()
+      })),
+      cachedAt: new Date().toISOString()
+    };
+    localStorage.setItem(key, JSON.stringify(cached));
+  } catch (error) {
+    console.error('Error saving cached assignments:', error);
+  }
+}
+
+// Clear cached assignments for a specific course
+export function clearCachedAssignments(courseId: number): void {
+  if (typeof window === 'undefined') return;
+  
+  try {
+    const key = `${ASSIGNMENTS_STORAGE_PREFIX}${courseId}`;
+    localStorage.removeItem(key);
+  } catch (error) {
+    console.error('Error clearing cached assignments:', error);
+  }
+}
+
+// Extracted Text Caching Functions
+
+export interface CachedExtractedText {
+  canvasId?: number; // Canvas file ID if from Canvas
+  fileName: string;
+  text: string;
+  fileModifiedAt?: string; // When the file was last modified (for Canvas files)
+  extractedAt: string; // When we extracted the text
+}
+
+export interface CachedExtractedTexts {
+  texts: CachedExtractedText[];
+  cachedAt: string;
+}
+
+// Get cached extracted text for a specific course
+export function getCachedExtractedText(courseId: number): CachedExtractedTexts | null {
+  if (typeof window === 'undefined') return null;
+  
+  try {
+    const key = `${EXTRACTED_TEXT_STORAGE_PREFIX}${courseId}`;
+    const stored = localStorage.getItem(key);
+    return stored ? JSON.parse(stored) as CachedExtractedTexts : null;
+  } catch {
+    return null;
+  }
+}
+
+// Save cached extracted text for a specific course
+export function saveCachedExtractedText(courseId: number, texts: CachedExtractedText[]): void {
+  if (typeof window === 'undefined') return;
+  
+  try {
+    const key = `${EXTRACTED_TEXT_STORAGE_PREFIX}${courseId}`;
+    const cached: CachedExtractedTexts = {
+      texts,
+      cachedAt: new Date().toISOString()
+    };
+    localStorage.setItem(key, JSON.stringify(cached));
+  } catch (error) {
+    console.error('Error saving cached extracted text:', error);
+    // If quota exceeded, provide helpful error
+    if (error instanceof DOMException && error.code === 22) {
+      throw new Error('Storage quota exceeded. Please clear some cached files to free up space.');
+    }
+    throw error;
+  }
+}
+
+// Clear cached extracted text for a specific course
+export function clearCachedExtractedText(courseId: number): void {
+  if (typeof window === 'undefined') return;
+  
+  try {
+    const key = `${EXTRACTED_TEXT_STORAGE_PREFIX}${courseId}`;
+    localStorage.removeItem(key);
+  } catch (error) {
+    console.error('Error clearing cached extracted text:', error);
   }
 }

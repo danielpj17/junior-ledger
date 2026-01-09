@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { BookOpen, Loader2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { fetchCourseAssignments } from '../actions/canvas';
-import { getCanvasToken } from '../lib/courseStorage';
+import { getCanvasToken, getCachedAssignments, saveCachedAssignments } from '../lib/courseStorage';
 
 interface ClassCardProps {
   name: string;
@@ -31,7 +31,21 @@ export default function ClassCard({ name, courseCode, courseId, index }: ClassCa
       }
 
       try {
-        const assignments = await fetchCourseAssignments(token, courseId);
+        // Check cache first
+        const cached = getCachedAssignments(courseId);
+        let assignments: any[];
+        
+        if (cached) {
+          // Use cached assignments
+          assignments = cached.assignments;
+          setIsLoading(false);
+        } else {
+          // Fetch from API
+          assignments = await fetchCourseAssignments(token, courseId);
+          // Cache the assignments
+          saveCachedAssignments(courseId, assignments);
+        }
+
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 

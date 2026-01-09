@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Send, MessageSquare, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { sendChatMessage, FileContext } from '../actions/chat';
-import { getCourseChatMessages, saveCourseChatMessages, ChatMessage, getCourseFiles, getCanvasToken, getCachedCanvasFiles, cacheCanvasFile, getCachedCanvasFile, CachedCanvasFile } from '../lib/courseStorage';
+import { getCourseChatMessages, saveCourseChatMessages, ChatMessage, getCourseFiles, getCanvasToken, getCachedCanvasFiles, cacheCanvasFile, getCachedCanvasFile, CachedCanvasFile, getCachedExtractedText, saveCachedExtractedText, CachedExtractedText } from '../lib/courseStorage';
 import { extractTextFromFiles, canvasFileToExtractionFormat, isFileTypeSupported } from '../lib/fileExtraction';
 import { fetchCourseFiles, fetchCourseFolders, fetchFolderFiles, downloadCanvasFileAsBase64, CanvasFile } from '../actions/canvas';
 import MessageContent from './MessageContent';
@@ -57,6 +57,17 @@ export default function JuniorAssistant({ courseId, courseNickname }: JuniorAssi
     setIsExtractingFiles(true);
     setExtractionStatus('Loading files...');
     try {
+      // Check for cached extracted text first
+      const cachedExtractedText = getCachedExtractedText(courseId);
+      const cachedTextMap = new Map<string, CachedExtractedText>();
+      
+      if (cachedExtractedText) {
+        cachedExtractedText.texts.forEach(text => {
+          const key = text.canvasId ? `canvas-${text.canvasId}` : `uploaded-${text.fileName}`;
+          cachedTextMap.set(key, text);
+        });
+      }
+      
       // Get user-uploaded files
       const uploadedFiles = getCourseFiles(courseId);
       
@@ -172,7 +183,7 @@ export default function JuniorAssistant({ courseId, courseNickname }: JuniorAssi
               });
             }
           } else {
-            setExtractionStatus('Using cached files...');
+            setExtractionStatus('Checking cached files...');
           }
           
           // Update cached files map with all files (both existing and newly downloaded)
@@ -185,50 +196,152 @@ export default function JuniorAssistant({ courseId, courseNickname }: JuniorAssi
         }
       }
       
-      // Combine all files for processing
-      const allFiles: Array<{ name: string; type: string; data: string }> = [];
+      // Determine which files need text extraction
+      const filesToExtract: Array<{ name: string; type: string; data: string; canvasId?: number; fileModifiedAt?: string }> = [];
+      const contextsFromCache: FileContext[] = [];
       
-      // Add user-uploaded files (they already have base64 data)
+      // Check user-uploaded files
       uploadedFiles.forEach(file => {
-        allFiles.push({
-          name: file.name,
-          type: file.type,
-          data: file.data
-        });
+        const key = `uploaded-${file.name}`;
+        const cachedText = cachedTextMap.get(key);
+        
+        if (cachedText && cachedText.extractedAt) {
+          // Use cached extracted text
+          contextsFromCache.push({
+            fileName: file.name,
+            text: cachedText.text
+          });
+        } else {
+          // Need to extract text
+          filesToExtract.push({
+            name: file.name,
+            type: file.type,
+            data: file.data
+          });
+        }
       });
       
-      // Add Canvas files (from cache and newly downloaded)
+      // Check Canvas files
       if (token) {
         const allCachedFiles = Array.from(cachedFilesMap.values());
         allCachedFiles.forEach(cachedFile => {
-          allFiles.push({
+          const key = `canvas-${cachedFile.canvasId}`;
+          const cachedText = cachedTextMap.get(key);
+          
+          // Check if we have cached text for this file and if it's still valid
+          if (cachedText && cachedText.canvasId === cachedFile.canvasId && cachedText.fileModifiedAt) {
+            const cachedTextFileModifiedAt = new Date(cachedText.fileModifiedAt).getTime();
+            const currentFileModifiedAt = new Date(cachedFile.modifiedAt).getTime();
+            
+            // If the cached text was extracted for a file with the same modification time, use it
+            if (cachedTextFileModifiedAt === currentFileModifiedAt) {
+              // Use cached extracted text (file hasn't been updated since extraction)
+              contextsFromCache.push({
+                fileName: cachedFile.name,
+                text: cachedText.text
+              });
+              return;
+            }
+          }
+          
+          // Need to extract text (new file or file was updated)
+          filesToExtract.push({
             name: cachedFile.name,
             type: cachedFile.type,
-            data: cachedFile.data
+            data: cachedFile.data,
+            canvasId: cachedFile.canvasId,
+            fileModifiedAt: cachedFile.modifiedAt
           });
         });
       }
       
-      if (allFiles.length === 0) {
-        setFileContexts([]);
-        setExtractionStatus('');
-        return;
+      // Extract text from files that need it
+      let extractedTexts: Array<{ fileName: string; text: string; canvasId?: number; fileModifiedAt?: string }> = [];
+      
+      if (filesToExtract.length > 0) {
+        setExtractionStatus(`Extracting text from ${filesToExtract.length} file${filesToExtract.length !== 1 ? 's' : ''}...`);
+        
+        // Extract text from files that need it
+        const extractionResults = await extractTextFromFiles(
+          filesToExtract.map(f => ({ name: f.name, type: f.type, data: f.data }))
+        );
+        
+        extractedTexts = extractionResults
+          .map((result, index) => ({
+            fileName: result.fileName,
+            text: result.text,
+            canvasId: filesToExtract[index].canvasId,
+            fileModifiedAt: filesToExtract[index].fileModifiedAt
+          }))
+          .filter(result => result.text.trim().length > 0);
+        
+        // Cache the newly extracted text and preserve valid cached texts
+        const cachedTexts: CachedExtractedText[] = extractedTexts.map(result => ({
+          canvasId: result.canvasId,
+          fileName: result.fileName,
+          text: result.text,
+          fileModifiedAt: result.fileModifiedAt,
+          extractedAt: new Date().toISOString()
+        }));
+        
+        // Also include cached texts that are still valid (from contextsFromCache)
+        contextsFromCache.forEach(context => {
+          // Find the corresponding cached text
+          let foundCachedText: CachedExtractedText | undefined;
+          
+          // Check uploaded files
+          for (const [key, cachedText] of cachedTextMap.entries()) {
+            if (key.startsWith('uploaded-') && cachedText.fileName === context.fileName) {
+              foundCachedText = cachedText;
+              break;
+            }
+          }
+          
+          // Check Canvas files
+          if (!foundCachedText) {
+            const allCachedFiles = Array.from(cachedFilesMap.values());
+            const matchingFile = allCachedFiles.find(f => f.name === context.fileName);
+            if (matchingFile) {
+              const key = `canvas-${matchingFile.canvasId}`;
+              foundCachedText = cachedTextMap.get(key);
+            }
+          }
+          
+          if (foundCachedText) {
+            cachedTexts.push(foundCachedText);
+          }
+        });
+        
+        // Save all cached texts
+        saveCachedExtractedText(courseId, cachedTexts);
+      } else {
+        // All texts are from cache, but we still need to save them to ensure cache is maintained
+        const allCachedTexts: CachedExtractedText[] = [];
+        contextsFromCache.forEach(context => {
+          // Find the corresponding cached text
+          for (const [key, cachedText] of cachedTextMap.entries()) {
+            if (cachedText.fileName === context.fileName) {
+              allCachedTexts.push(cachedText);
+              break;
+            }
+          }
+        });
+        if (allCachedTexts.length > 0) {
+          saveCachedExtractedText(courseId, allCachedTexts);
+        }
+        setExtractionStatus('Using cached extracted text...');
       }
       
-      setExtractionStatus(`Extracting text from ${allFiles.length} files...`);
+      // Combine cached and newly extracted contexts
+      const allContexts: FileContext[] = [
+        ...contextsFromCache,
+        ...extractedTexts.map(result => ({
+          fileName: result.fileName,
+          text: result.text
+        }))
+      ];
       
-      // Extract text from all files
-      const extractedTexts = await extractTextFromFiles(allFiles);
-      
-      // Convert to FileContext format
-      const contexts: FileContext[] = extractedTexts
-        .filter(extracted => extracted.text.trim().length > 0)
-        .map(extracted => ({
-          fileName: extracted.fileName,
-          text: extracted.text
-        }));
-      
-      setFileContexts(contexts);
+      setFileContexts(allContexts);
       setExtractionStatus('');
     } catch (error) {
       console.error('Error extracting file content:', error);

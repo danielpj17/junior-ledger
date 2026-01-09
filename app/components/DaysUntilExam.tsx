@@ -3,11 +3,12 @@
 import { useState, useEffect } from 'react';
 import { useCourses } from './CoursesProvider';
 import { fetchCourseAssignments } from '../actions/canvas';
-import { getCanvasToken } from '../lib/courseStorage';
+import { getCanvasToken, getCachedAssignments, saveCachedAssignments } from '../lib/courseStorage';
 
 export default function DaysUntilExam() {
   const [daysUntil, setDaysUntil] = useState<number | null>(null);
   const [examName, setExamName] = useState<string | null>(null);
+  const [examCourseName, setExamCourseName] = useState<string | null>(null);
   const { courses } = useCourses();
 
   useEffect(() => {
@@ -15,15 +16,28 @@ export default function DaysUntilExam() {
       const token = getCanvasToken();
       if (!token || courses.length === 0) {
         setDaysUntil(null);
+        setExamName(null);
+        setExamCourseName(null);
         return;
       }
 
       try {
-        // Fetch all assignments from all courses
+        // Fetch all assignments from all courses (using cache when available)
         const allAssignments = await Promise.all(
           courses.map(async (course) => {
             try {
-              const assignments = await fetchCourseAssignments(token, course.canvasId);
+              // Check cache first
+              const cached = getCachedAssignments(course.canvasId);
+              let assignments: any[];
+              
+              if (cached) {
+                assignments = cached.assignments;
+              } else {
+                assignments = await fetchCourseAssignments(token, course.canvasId);
+                // Cache the assignments
+                saveCachedAssignments(course.canvasId, assignments);
+              }
+              
               return assignments.map((assignment: any) => ({
                 ...assignment,
                 courseName: course.nickname,
@@ -72,14 +86,17 @@ export default function DaysUntilExam() {
           
           setDaysUntil(Math.max(0, diffDays));
           setExamName(nearestExam.name);
+          setExamCourseName(nearestExam.courseName || null);
         } else {
           setDaysUntil(null);
           setExamName(null);
+          setExamCourseName(null);
         }
       } catch (error) {
         console.error('Error fetching exams:', error);
         setDaysUntil(null);
         setExamName(null);
+        setExamCourseName(null);
       }
     };
 
@@ -96,7 +113,12 @@ export default function DaysUntilExam() {
         <div>
           <h2 className="text-2xl font-bold mb-1">Days Until Exam</h2>
           {examName ? (
-            <p className="text-white/80 text-sm">{examName}</p>
+            <div>
+              <p className="text-white/80 text-sm font-medium">{examName}</p>
+              {examCourseName && (
+                <p className="text-white/70 text-xs mt-0.5">{examCourseName}</p>
+              )}
+            </div>
           ) : (
             <p className="text-white/80 text-sm">Final exams approaching</p>
           )}

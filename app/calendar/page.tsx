@@ -455,174 +455,177 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {/* Selected Date's Events Panel */}
-      {!isLoading && (
-        <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-6">
-          <h2 className="text-xl font-semibold text-[#002E5D] mb-4 flex items-center gap-2">
-            <CalendarIcon className="w-5 h-5" />
-            {selectedDateDisplay}'s Schedule
-          </h2>
-          {selectedDateEvents.length > 0 ? (
-            <div className="space-y-3">
-              {selectedDateEvents.map((event) => {
-              const courseId = getCourseIdFromContext(event.context_code);
-              const isGoogleEvent = isGoogleCalendarEvent(event);
-              const isExam = isExamEvent(event);
-              const color = courseId ? getCourseColor(courseId) : (isExam ? '#DC2626' : isGoogleEvent ? '#4285F4' : '#002E5D');
-              const course = courseId ? courses.find(c => c.canvasId === courseId) : null;
-              
-              return (
-                <div
-                  key={`${event.type}-${event.id}`}
-                  className="p-4 rounded-lg border-l-4 hover:shadow-md transition-shadow"
-                  style={{ borderLeftColor: color }}
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="font-semibold text-gray-900">{event.title}</h3>
-                        {course && (
-                          <span
-                            className="text-xs px-2 py-0.5 rounded-full text-white font-medium"
-                            style={{ backgroundColor: courseId ? getCourseColor(courseId) : color }}
+      {/* Main Content Layout: 2/3 Today's Schedule, 1/3 Calendar Selection */}
+      <div className="flex flex-col lg:flex-row gap-6">
+        {/* Left Section - Today's Schedule (2/3) */}
+        <div className="flex-[2]">
+          {!isLoading && (
+            <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-6">
+              <h2 className="text-xl font-semibold text-[#002E5D] mb-4 flex items-center gap-2">
+                <CalendarIcon className="w-5 h-5" />
+                {selectedDateDisplay}'s Schedule
+              </h2>
+              {selectedDateEvents.length > 0 ? (
+                <div className="space-y-3">
+                  {selectedDateEvents.map((event) => {
+                  const courseId = getCourseIdFromContext(event.context_code);
+                  const isGoogleEvent = isGoogleCalendarEvent(event);
+                  const isExam = isExamEvent(event);
+                  const color = courseId ? getCourseColor(courseId) : (isExam ? '#DC2626' : isGoogleEvent ? '#4285F4' : '#002E5D');
+                  const course = courseId ? courses.find(c => c.canvasId === courseId) : null;
+                  
+                  return (
+                    <div
+                      key={`${event.type}-${event.id}`}
+                      className="p-4 rounded-lg border-l-4 hover:shadow-md transition-shadow"
+                      style={{ borderLeftColor: color }}
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h3 className="font-semibold text-gray-900">{event.title}</h3>
+                            {course && (
+                              <span
+                                className="text-xs px-2 py-0.5 rounded-full text-white font-medium"
+                                style={{ backgroundColor: courseId ? getCourseColor(courseId) : color }}
+                              >
+                                {course.nickname}
+                              </span>
+                            )}
+                            {isExam && (
+                              <span
+                                className="text-xs px-2 py-0.5 rounded-full text-white font-medium"
+                                style={{ backgroundColor: '#DC2626' }}
+                              >
+                                📝 Exam/Test
+                              </span>
+                            )}
+                            {isGoogleEvent && !isExam && (
+                              <span
+                                className="text-xs px-2 py-0.5 rounded-full text-white font-medium"
+                                style={{ backgroundColor: '#4285F4' }}
+                              >
+                                Google Calendar
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-600">
+                            {formatEventTime(event)}
+                          </p>
+                          {event.location_name && (
+                            <p className="text-sm text-gray-500 mt-1">
+                              📍 {event.location_name}
+                            </p>
+                          )}
+                          {event.description && (
+                            <p className="text-sm text-gray-600 mt-2 line-clamp-1">
+                              {event.description.replace(/<[^>]*>/g, '')}
+                            </p>
+                          )}
+                        </div>
+                        {event.html_url && (
+                          <a
+                            href={event.html_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[#002E5D] hover:text-[#004080] text-sm font-medium whitespace-nowrap"
                           >
-                            {course.nickname}
-                          </span>
-                        )}
-                        {isExam && (
-                          <span
-                            className="text-xs px-2 py-0.5 rounded-full text-white font-medium"
-                            style={{ backgroundColor: '#DC2626' }}
-                          >
-                            📝 Exam/Test
-                          </span>
-                        )}
-                        {isGoogleEvent && !isExam && (
-                          <span
-                            className="text-xs px-2 py-0.5 rounded-full text-white font-medium"
-                            style={{ backgroundColor: '#4285F4' }}
-                          >
-                            Google Calendar
-                          </span>
+                            View →
+                          </a>
                         )}
                       </div>
-                      <p className="text-sm text-gray-600">
-                        {formatEventTime(event)}
-                      </p>
-                      {event.location_name && (
-                        <p className="text-sm text-gray-500 mt-1">
-                          📍 {event.location_name}
-                        </p>
-                      )}
-                      {event.description && (
-                        <p className="text-sm text-gray-600 mt-2 line-clamp-2">
-                          {event.description.replace(/<[^>]*>/g, '')}
-                        </p>
-                      )}
                     </div>
-                    {event.html_url && (
-                      <a
-                        href={event.html_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[#002E5D] hover:text-[#004080] text-sm font-medium whitespace-nowrap"
-                      >
-                        View →
-                      </a>
-                    )}
-                  </div>
+                  );
+                  })}
                 </div>
-              );
-              })}
-            </div>
-          ) : (
-            <div className="text-center py-8 text-gray-500">
-              <CalendarIcon className="w-12 h-12 mx-auto mb-2 text-gray-300" />
-              <p>No events scheduled for {selectedDateDisplay.toLowerCase()}</p>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <CalendarIcon className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                  <p>No events scheduled for {selectedDateDisplay.toLowerCase()}</p>
+                </div>
+              )}
             </div>
           )}
         </div>
-      )}
 
-      {/* Course Selection Panel */}
-      <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-6">
-        <h2 className="text-xl font-semibold text-[#002E5D] mb-4">
-          Select Calendars to Display
-        </h2>
-        
-        {/* Google Calendar Toggle */}
-        {getGoogleCalendarFeedUrl() && (
-          <div className="mb-4 pb-4 border-b border-gray-200">
-            <button
-              onClick={toggleGoogleCalendarSelection}
-              className={`flex items-center gap-3 p-3 rounded-lg border-2 transition-all w-full ${
-                googleCalendarSelected
-                  ? 'border-[#4285F4] bg-blue-50'
-                  : 'border-gray-200 bg-white hover:border-gray-300'
-              }`}
-            >
-              <div
-                className="w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors"
-                style={{
-                  backgroundColor: googleCalendarSelected ? '#4285F4' : 'white',
-                  borderColor: '#4285F4',
-                }}
-              >
-                {googleCalendarSelected && (
-                  <Check className="w-3 h-3 text-white" strokeWidth={3} />
-                )}
-              </div>
-              <span className={`text-sm font-medium flex-1 text-left ${
-                googleCalendarSelected ? 'text-gray-900' : 'text-gray-500'
-              }`}>
-                📅 Google Calendar
-              </span>
-            </button>
-          </div>
-        )}
-        
-        {/* Canvas Courses */}
-        <div>
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">Canvas Courses</h3>
-          {courses.length === 0 ? (
-            <p className="text-gray-500">No courses available. Please sync your Canvas account in Settings.</p>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {courses.map((course) => {
-                const isSelected = isCourseSelected(course.canvasId);
-                const color = getCourseColor(course.canvasId);
-                
-                return (
-                  <button
-                    key={course.canvasId}
-                    onClick={() => toggleCourseSelection(course.canvasId)}
-                    className={`flex items-center gap-3 p-3 rounded-lg border-2 transition-all ${
-                      isSelected
-                        ? 'border-[#002E5D] bg-blue-50'
-                        : 'border-gray-200 bg-white hover:border-gray-300'
-                    }`}
+        {/* Right Section - Calendar Selection (1/3) */}
+        <div className="flex-1">
+          <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-6 sticky top-8">
+            <h2 className="text-lg font-semibold text-[#002E5D] mb-4">
+              Calendars
+            </h2>
+            
+            {/* List of all calendars (Google Calendar + Canvas Courses) */}
+            <div className="space-y-2">
+              {/* Google Calendar (if configured) */}
+              {getGoogleCalendarFeedUrl() && (
+                <button
+                  onClick={toggleGoogleCalendarSelection}
+                  className={`flex items-center gap-3 p-2 rounded-lg border transition-all w-full text-left ${
+                    googleCalendarSelected
+                      ? 'border-[#4285F4] bg-blue-50'
+                      : 'border-gray-200 bg-white hover:border-gray-300'
+                  }`}
+                >
+                  <div
+                    className="w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors"
+                    style={{
+                      backgroundColor: googleCalendarSelected ? '#4285F4' : 'white',
+                      borderColor: '#4285F4',
+                    }}
                   >
-                    <div
-                      className="w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors"
-                      style={{
-                        backgroundColor: isSelected ? color : 'white',
-                        borderColor: color,
-                      }}
+                    {googleCalendarSelected && (
+                      <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />
+                    )}
+                  </div>
+                  <span className={`text-sm font-medium flex-1 ${
+                    googleCalendarSelected ? 'text-gray-900' : 'text-gray-500'
+                  }`}>
+                    Google Calendar
+                  </span>
+                </button>
+              )}
+              
+              {/* Canvas Courses */}
+              {courses.length === 0 ? (
+                <p className="text-sm text-gray-500 py-2">No courses available. Please sync your Canvas account in Settings.</p>
+              ) : (
+                courses.map((course) => {
+                  const isSelected = isCourseSelected(course.canvasId);
+                  const color = getCourseColor(course.canvasId);
+                  
+                  return (
+                    <button
+                      key={course.canvasId}
+                      onClick={() => toggleCourseSelection(course.canvasId)}
+                      className={`flex items-center gap-3 p-2 rounded-lg border transition-all w-full text-left ${
+                        isSelected
+                          ? 'border-[#002E5D] bg-blue-50'
+                          : 'border-gray-200 bg-white hover:border-gray-300'
+                      }`}
                     >
-                      {isSelected && (
-                        <Check className="w-3 h-3 text-white" strokeWidth={3} />
-                      )}
-                    </div>
-                    <span className={`text-sm font-medium flex-1 text-left ${
-                      isSelected ? 'text-gray-900' : 'text-gray-500'
-                    }`}>
-                      {course.nickname}
-                    </span>
-                  </button>
-                );
-              })}
+                      <div
+                        className="w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors"
+                        style={{
+                          backgroundColor: isSelected ? color : 'white',
+                          borderColor: color,
+                        }}
+                      >
+                        {isSelected && (
+                          <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />
+                        )}
+                      </div>
+                      <span className={`text-sm font-medium flex-1 truncate ${
+                        isSelected ? 'text-gray-900' : 'text-gray-500'
+                      }`}>
+                        {course.nickname}
+                      </span>
+                    </button>
+                  );
+                })
+              )}
             </div>
-          )}
+          </div>
         </div>
       </div>
 
