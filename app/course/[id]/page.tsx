@@ -246,9 +246,25 @@ export default function CoursePage() {
     );
   }
 
+  // Helper function to strip HTML tags
+  const stripHtml = (html: string): string => {
+    if (typeof window === 'undefined') {
+      // Server-side: use regex
+      return html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').trim();
+    }
+    // Client-side: use DOM
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    return tmp.textContent || tmp.innerText || '';
+  };
+
   const upcomingAssignments = assignments
     .filter(a => a.due_at && new Date(a.due_at) > new Date())
     .sort((a, b) => new Date(a.due_at).getTime() - new Date(b.due_at).getTime())
+    .map(assignment => ({
+      ...assignment,
+      descriptionText: assignment.description ? stripHtml(assignment.description) : ''
+    }))
     .slice(0, 5);
 
   return (
@@ -376,31 +392,41 @@ export default function CoursePage() {
           <div className="text-center py-8 text-gray-500">Loading assignments...</div>
         ) : upcomingAssignments.length > 0 ? (
           <div className="space-y-3">
-            {upcomingAssignments.map((assignment) => (
-              <motion.div
-                key={assignment.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-gray-900">{assignment.name}</h3>
-                    {assignment.description && (
-                      <p className="text-sm text-gray-600 mt-1 line-clamp-2" dangerouslySetInnerHTML={{ __html: assignment.description.substring(0, 150) + '...' }} />
-                    )}
+            {upcomingAssignments.map((assignment) => {
+              // Build Canvas URL if html_url is not available
+              const canvasUrl = assignment.html_url || `https://byu.instructure.com/courses/${courseId}/assignments/${assignment.id}`;
+              
+              return (
+                <motion.a
+                  key={assignment.id}
+                  href={canvasUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="block border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 min-w-0 pr-4">
+                      <h3 className="font-semibold text-gray-900">{assignment.name}</h3>
+                      {assignment.descriptionText && (
+                        <p className="text-sm text-gray-600 mt-1 line-clamp-1">
+                          {assignment.descriptionText}
+                        </p>
+                      )}
+                    </div>
+                    <div className="ml-4 text-right flex-shrink-0">
+                      <p className="text-sm font-medium text-[#002E5D]">
+                        {new Date(assignment.due_at).toLocaleDateString()}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {new Date(assignment.due_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
                   </div>
-                  <div className="ml-4 text-right">
-                    <p className="text-sm font-medium text-[#002E5D]">
-                      {new Date(assignment.due_at).toLocaleDateString()}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      {new Date(assignment.due_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
+                </motion.a>
+              );
+            })}
           </div>
         ) : (
           <div className="text-center py-8 text-gray-500">
