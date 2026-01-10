@@ -563,15 +563,15 @@ export default function CalendarPage() {
                   onClick={toggleGoogleCalendarSelection}
                   className={`flex items-center gap-3 p-2 rounded-lg border transition-all w-full text-left ${
                     googleCalendarSelected
-                      ? 'border-[#4285F4] bg-blue-50'
+                      ? 'border-[#002E5D] bg-blue-50'
                       : 'border-gray-200 bg-white hover:border-gray-300'
                   }`}
                 >
                   <div
                     className="w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors"
                     style={{
-                      backgroundColor: googleCalendarSelected ? '#4285F4' : 'white',
-                      borderColor: '#4285F4',
+                      backgroundColor: googleCalendarSelected ? '#002E5D' : 'white',
+                      borderColor: '#002E5D',
                     }}
                   >
                     {googleCalendarSelected && (

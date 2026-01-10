@@ -41,6 +41,8 @@ export default function JuniorAssistant({ courseId, courseNickname }: JuniorAssi
   const [fileContexts, setFileContexts] = useState<FileContext[]>([]);
   const [isExtractingFiles, setIsExtractingFiles] = useState(false);
   const [extractionStatus, setExtractionStatus] = useState<string>('');
+  const [showDocumentList, setShowDocumentList] = useState(false);
+  const documentListRef = useRef<HTMLDivElement>(null);
 
   // Extract text from course files when courseId changes
   useEffect(() => {
@@ -205,14 +207,15 @@ export default function JuniorAssistant({ courseId, courseNickname }: JuniorAssi
         const key = `uploaded-${file.name}`;
         const cachedText = cachedTextMap.get(key);
         
-        if (cachedText && cachedText.extractedAt) {
+        // Only use cached text if it exists, has been extracted, and has non-empty text
+        if (cachedText && cachedText.extractedAt && cachedText.text && cachedText.text.trim().length > 0) {
           // Use cached extracted text
           contextsFromCache.push({
             fileName: file.name,
             text: cachedText.text
           });
         } else {
-          // Need to extract text
+          // Need to extract text (no cache, empty cache, or invalid cache)
           filesToExtract.push({
             name: file.name,
             type: file.type,
@@ -233,8 +236,8 @@ export default function JuniorAssistant({ courseId, courseNickname }: JuniorAssi
             const cachedTextFileModifiedAt = new Date(cachedText.fileModifiedAt).getTime();
             const currentFileModifiedAt = new Date(cachedFile.modifiedAt).getTime();
             
-            // If the cached text was extracted for a file with the same modification time, use it
-            if (cachedTextFileModifiedAt === currentFileModifiedAt) {
+            // If the cached text was extracted for a file with the same modification time and has non-empty text, use it
+            if (cachedTextFileModifiedAt === currentFileModifiedAt && cachedText.text && cachedText.text.trim().length > 0) {
               // Use cached extracted text (file hasn't been updated since extraction)
               contextsFromCache.push({
                 fileName: cachedFile.name,
@@ -285,6 +288,7 @@ export default function JuniorAssistant({ courseId, courseNickname }: JuniorAssi
         }));
         
         // Also include cached texts that are still valid (from contextsFromCache)
+        // Only include cached texts that have non-empty text
         contextsFromCache.forEach(context => {
           // Find the corresponding cached text
           let foundCachedText: CachedExtractedText | undefined;
@@ -307,7 +311,8 @@ export default function JuniorAssistant({ courseId, courseNickname }: JuniorAssi
             }
           }
           
-          if (foundCachedText) {
+          // Only add if cached text exists and has non-empty text
+          if (foundCachedText && foundCachedText.text && foundCachedText.text.trim().length > 0) {
             cachedTexts.push(foundCachedText);
           }
         });
@@ -320,7 +325,7 @@ export default function JuniorAssistant({ courseId, courseNickname }: JuniorAssi
         contextsFromCache.forEach(context => {
           // Find the corresponding cached text
           for (const [key, cachedText] of cachedTextMap.entries()) {
-            if (cachedText.fileName === context.fileName) {
+            if (cachedText.fileName === context.fileName && cachedText.text && cachedText.text.trim().length > 0) {
               allCachedTexts.push(cachedText);
               break;
             }
@@ -340,6 +345,21 @@ export default function JuniorAssistant({ courseId, courseNickname }: JuniorAssi
           text: result.text
         }))
       ];
+      
+      // Log for debugging - identify any files that are missing
+      const totalFilesExpected = uploadedFiles.length + (token ? Array.from(cachedFilesMap.values()).length : 0);
+      if (allContexts.length !== totalFilesExpected) {
+        console.log(`File count mismatch: ${allContexts.length} contexts available, ${totalFilesExpected} files total`);
+        const contextFileNames = new Set(allContexts.map(c => c.fileName));
+        const allFileNames = [
+          ...uploadedFiles.map(f => f.name),
+          ...(token ? Array.from(cachedFilesMap.values()).map(f => f.name) : [])
+        ];
+        const missingFiles = allFileNames.filter(name => !contextFileNames.has(name));
+        if (missingFiles.length > 0) {
+          console.log('Files not available to assistant (likely empty or failed extraction):', missingFiles);
+        }
+      }
       
       setFileContexts(allContexts);
       setExtractionStatus('');
@@ -397,6 +417,23 @@ export default function JuniorAssistant({ courseId, courseNickname }: JuniorAssi
       saveCourseChatMessages(courseId, messages);
     }
   }, [messages, courseId]);
+
+  // Close document list when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (documentListRef.current && !documentListRef.current.contains(event.target as Node)) {
+        setShowDocumentList(false);
+      }
+    };
+
+    if (showDocumentList) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showDocumentList]);
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -462,9 +499,51 @@ export default function JuniorAssistant({ courseId, courseNickname }: JuniorAssi
           <div className="flex flex-col">
             <h3 className="font-semibold">{assistantName}</h3>
             {courseId && fileCount > 0 && (
-              <p className="text-xs text-blue-200">
-                {fileCount} document{fileCount !== 1 ? 's' : ''} available
-              </p>
+              <div className="relative" ref={documentListRef}>
+                <p 
+                  className="text-xs text-blue-200 cursor-pointer hover:text-blue-100 underline decoration-dotted transition-colors"
+                  onMouseEnter={() => setShowDocumentList(true)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowDocumentList(!showDocumentList);
+                  }}
+                  title="Click or hover to see document list"
+                >
+                  {fileCount} document{fileCount !== 1 ? 's' : ''} available
+                </p>
+                <AnimatePresence>
+                  {showDocumentList && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -5 }}
+                      transition={{ duration: 0.2 }}
+                      className="absolute left-0 top-full mt-2 w-72 max-h-80 overflow-y-auto bg-white border border-gray-300 rounded-lg shadow-xl z-50"
+                      onMouseEnter={() => setShowDocumentList(true)}
+                      onMouseLeave={() => setShowDocumentList(false)}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="p-3 border-b border-gray-200 bg-gray-50 sticky top-0">
+                        <p className="text-xs font-semibold text-gray-700">Available Documents ({fileCount}):</p>
+                      </div>
+                      <ul className="py-2 max-h-64 overflow-y-auto">
+                        {fileContexts.map((context, index) => (
+                          <li 
+                            key={index}
+                            className="text-xs text-gray-700 px-3 py-2 hover:bg-blue-50 border-b border-gray-100 last:border-b-0 transition-colors"
+                            title={context.fileName}
+                          >
+                            <div className="flex items-start gap-2">
+                              <span className="text-gray-400 flex-shrink-0 mt-0.5">•</span>
+                              <span className="break-words">{context.fileName}</span>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             )}
             {isExtractingFiles && extractionStatus && (
               <p className="text-xs text-blue-200">{extractionStatus}</p>
