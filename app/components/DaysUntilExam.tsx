@@ -56,9 +56,23 @@ export default function DaysUntilExam() {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
+        // Helper function to check if assignment is completed/submitted in Canvas
+        const isAssignmentSubmitted = (assignment: any): boolean => {
+          // Check if assignment has a submission object from Canvas
+          if (assignment.submission) {
+            const workflowState = assignment.submission.workflow_state;
+            // Assignment is considered completed if it's been submitted or graded
+            return workflowState === 'submitted' || workflowState === 'graded';
+          }
+          return false;
+        };
+
         const upcomingExams = flatAssignments
           .filter((assignment: any) => {
             if (!assignment.due_at) return false;
+            // Filter out assignments that have been submitted/completed in Canvas
+            if (isAssignmentSubmitted(assignment)) return false;
+            
             const assignmentName = (assignment.name || '').toLowerCase();
             const isExam = assignmentName.includes('exam') || 
                           assignmentName.includes('final') ||

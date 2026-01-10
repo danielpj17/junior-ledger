@@ -49,10 +49,23 @@ export default function ClassCard({ name, courseCode, courseId, index }: ClassCa
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
-        // Filter for upcoming assignments with due dates
+        // Helper function to check if assignment is completed/submitted in Canvas
+        const isAssignmentSubmitted = (assignment: any): boolean => {
+          // Check if assignment has a submission object from Canvas
+          if (assignment.submission) {
+            const workflowState = assignment.submission.workflow_state;
+            // Assignment is considered completed if it's been submitted or graded
+            return workflowState === 'submitted' || workflowState === 'graded';
+          }
+          return false;
+        };
+
+        // Filter for upcoming assignments with due dates, excluding completed/submitted ones from Canvas
         const upcomingAssignments = assignments
           .filter((assignment: any) => {
             if (!assignment.due_at) return false;
+            // Filter out assignments that have been submitted/completed in Canvas
+            if (isAssignmentSubmitted(assignment)) return false;
             const dueDate = new Date(assignment.due_at);
             dueDate.setHours(0, 0, 0, 0);
             return dueDate >= today;

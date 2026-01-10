@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Edit2, Save, X, Calendar, FileText, Loader2, AlertCircle, EyeOff, Trash2, Folder, ExternalLink, File } from 'lucide-react';
 import { fetchCourseAssignments, fetchCourseFiles, fetchCourseFolders, fetchFolderFiles, testFolderAccess, CanvasFile, CanvasFolder } from '../../actions/canvas';
@@ -258,14 +258,34 @@ export default function CoursePage() {
     return tmp.textContent || tmp.innerText || '';
   };
 
-  const upcomingAssignments = assignments
-    .filter(a => a.due_at && new Date(a.due_at) > new Date())
-    .sort((a, b) => new Date(a.due_at).getTime() - new Date(b.due_at).getTime())
-    .map(assignment => ({
-      ...assignment,
-      descriptionText: assignment.description ? stripHtml(assignment.description) : ''
-    }))
-    .slice(0, 5);
+  // Helper function to check if assignment is completed/submitted in Canvas
+  const isAssignmentSubmitted = (assignment: any): boolean => {
+    // Check if assignment has a submission object from Canvas
+    if (assignment.submission) {
+      const workflowState = assignment.submission.workflow_state;
+      // Assignment is considered completed if it's been submitted or graded
+      return workflowState === 'submitted' || workflowState === 'graded';
+    }
+    return false;
+  };
+
+  const upcomingAssignments = useMemo(() => {
+    return assignments
+      .filter(a => {
+        // Filter out assignments without due dates
+        if (!a.due_at) return false;
+        // Filter out past due assignments
+        if (new Date(a.due_at) <= new Date()) return false;
+        // Filter out assignments that have been submitted/completed in Canvas
+        return !isAssignmentSubmitted(a);
+      })
+      .sort((a, b) => new Date(a.due_at).getTime() - new Date(b.due_at).getTime())
+      .map(assignment => ({
+        ...assignment,
+        descriptionText: assignment.description ? stripHtml(assignment.description) : ''
+      }))
+      .slice(0, 5);
+  }, [assignments]);
 
   return (
     <div className="space-y-6">

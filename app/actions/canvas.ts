@@ -44,8 +44,9 @@ export async function fetchCanvasCourses(token: string): Promise<CanvasCourse[]>
 
 export async function fetchCourseAssignments(token: string, courseId: number) {
   try {
+    // Include submission status to know if assignments have been submitted/completed
     const response = await fetch(
-      `${CANVAS_API_BASE}/courses/${courseId}/assignments?per_page=100`,
+      `${CANVAS_API_BASE}/courses/${courseId}/assignments?per_page=100&include[]=submission&include[]=assignment_overrides`,
       {
         headers: {
           'Authorization': `Bearer ${token}`,

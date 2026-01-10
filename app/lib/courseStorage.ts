@@ -530,6 +530,11 @@ export interface CachedAssignment {
   due_at: string | null;
   course_id: number;
   cachedAt: string; // When we cached it
+  submission?: {
+    workflow_state: string;
+    [key: string]: any;
+  };
+  [key: string]: any; // Allow other assignment properties
 }
 
 export interface CachedAssignments {
@@ -566,9 +571,7 @@ export function saveCachedAssignments(courseId: number, assignments: any[]): voi
     const key = `${ASSIGNMENTS_STORAGE_PREFIX}${courseId}`;
     const cached: CachedAssignments = {
       assignments: assignments.map((assignment: any) => ({
-        id: assignment.id,
-        name: assignment.name,
-        due_at: assignment.due_at,
+        ...assignment, // Preserve all assignment properties including submission status
         course_id: courseId,
         cachedAt: new Date().toISOString()
       })),
