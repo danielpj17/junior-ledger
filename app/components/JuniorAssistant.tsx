@@ -501,7 +501,7 @@ export default function JuniorAssistant({ courseId, courseNickname }: JuniorAssi
             {courseId && fileCount > 0 && (
               <div className="relative" ref={documentListRef}>
                 <p 
-                  className="text-xs text-blue-200 cursor-pointer hover:text-blue-100 underline decoration-dotted transition-colors"
+                  className="text-xs text-blue-200 cursor-pointer hover:text-blue-100 transition-colors"
                   onMouseEnter={() => setShowDocumentList(true)}
                   onClick={(e) => {
                     e.stopPropagation();
